@@ -98,10 +98,11 @@ Ao atuar no projeto **SafeZone Studies**:
 
 * **NUNCA deduza ou altere o nicho do projeto de forma arbitrária**. Este projeto é especificamente um preparatório e gestor de estudos para certificações Microsoft Azure (**AI-200** e **AI-103**), com ingestão de conteúdos, geração de apostilas estruturadas e flashcards com repetição espaçada.
 * **Respeite a arquitetura e fluxos existentes**:
-  - A persistência oficial do backend é em **SQLite** (`data/safezone.db`), gerenciada pela API Node.js nativa em `server/index.mjs` via `node:sqlite`. (Não reintroduza IndexedDB/Dexie como persistência primária sem solicitação explícita).
-  - PDFs originais de até 50 MB são armazenados em `data/uploads/` e seus chunks de texto no SQLite.
-  - Flashcards gerados por IA são destinados **exclusivamente a questões** (até 50 questões deduplicadas), enquanto o conteúdo teórico compõe a **apostila (`studyGuide`)**.
-  - O fluxo de estudo equilibra aproximadamente **30% leitura de apostila e 70% questões em flashcards**, utilizando o algoritmo **SM-2**.
+  - A persistência oficial do projeto é em **Supabase BaaS (PostgreSQL + RLS + Supabase Auth por e-mail/senha)**.
+  - Arquivos e apostilas são armazenados no Supabase Storage (bucket `study-assets`) com isolamento estrito via políticas `auth.uid() = user_id`.
+  - Ingestão de notas Markdown (`.md`) do Google NotebookLM particionadas por tópicos e cabeçalhos (`#`, `##`, `###`).
+  - Provedor de IA com Google Gemini (padrão) e conector para NVIDIA NIM (Llama 3.3 70B), sem dependência do legado OmniRoute.
+  - O fluxo de estudo adota a **metodologia 30/70**: aproximadamente **30% leitura de apostila com armadilhas Microsoft e tabelas comparativas**, e **70% questões práticas em flashcards e múltipla escolha**, utilizando o algoritmo **SM-2** na escala nominal de 1 a 4.
 
 ---
 
@@ -122,9 +123,9 @@ Ao atuar no projeto **SafeZone Studies**:
 
 **SafeZone Studies** é uma aplicação web completa voltada para a organização de materiais de estudo e preparação acelerada para exames de certificação Microsoft Azure (**AI-200** e **AI-103**).
 
-* **Objetivo do projeto:** Permitir a importação ágil de conteúdos (PDFs, links ou textos diretos), extração e divisão inteligente em chunks, geração automatizada de apostilas estruturadas e flashcards via IA, além de sessões de estudo baseadas em repetição espaçada (SM-2) com métricas de retenção.
+* **Objetivo do projeto:** Permitir a importação ágil de notas estruturadas do Google NotebookLM (arquivos Markdown `.md`), PDFs, links ou textos, particionamento inteligente por cabeçalhos e tópicos, geração automatizada de apostilas teóricas (30%) com armadilhas de exame da Microsoft e matrizes comparativas de SKUs, e questões práticas (70%) em formato Anki e múltipla escolha via IA, além de sessões de estudo baseadas em repetição espaçada (SM-2) com isolamento multiusuário.
 * **Público-alvo:** Estudantes, engenheiros e profissionais de tecnologia em preparação para certificações Microsoft Azure AI.
-* **Modelo Arquitetural:** Single Page Application (SPA) reativa em React 19 servida pelo Vite 8, complementada por uma API HTTP nativa em Node.js (`server/index.mjs`) acoplada a um banco SQLite local (`data/safezone.db`), com suporte a PWA (`vite-plugin-pwa`) para cache estático e offline. Operações de dados dependem da API do servidor disponível.
+* **Modelo Arquitetural:** Single Page Application (SPA) reativa em React 19 servida pelo Vite 8, integrada diretamente ao Supabase BaaS (PostgreSQL com Row Level Security, Supabase Auth por e-mail/senha, Supabase Storage no bucket `study-assets`), com suporte a PWA (`vite-plugin-pwa`) para cache estático e offline.
 
 ---
 
@@ -132,21 +133,22 @@ Ao atuar no projeto **SafeZone Studies**:
 
 | Camada | Tecnologia | Observações |
 | :--- | :--- | :--- |
-| **Build & Dev Tool** | **Vite 8** | Servidor de desenvolvimento rápido, ESM nativo, proxy reverso `/api` → `localhost:3001` |
+| **Build & Dev Tool** | **Vite 8** | Servidor de desenvolvimento rápido, ESM nativo, proxy reverso `/api/nvidia` → `https://integrate.api.nvidia.com` |
 | **Linguagem** | **TypeScript ~6.0 / JavaScript** | Tipagem estrita em contratos (`src/types/index.ts`) e ESM |
 | **UI Framework** | **React 19** | Componentes funcionais, hooks nativos e React DOM |
-| **Roteamento** | **React Router 7 (`react-router-dom`)** | Roteamento declarativo com `BrowserRouter`, `<Routes>`, `<Route>` e `<MainLayout />` |
+| **Roteamento** | **React Router 7 (`react-router-dom`)** | Roteamento declarativo com `BrowserRouter`, rotas públicas (`/login`), rotas protegidas (`ProtectedRoute`) e `<MainLayout />` |
 | **Estilização** | **styled-components v6** | **REGRA ESTRITA: ZERO CSS DENTRO DE `src/`**. Proibido importar `.css`, `.scss` em `src/`. Todo o reset, tokens e componentes visuais derivam do Design System centralizado em `src/theme/`. |
-| **Nomenclatura de Estilos** | **Sufixo `Stl` Recomendado em novos componentes** | Componentes criados com styled-components devem preferencialmente adotar o sufixo `Stl` (ex: `ContainerGeralStl`, `CardItemStl`) para clareza visual. |
-| **API Backend** | **Node.js (`node:http` + `node:sqlite`)** | API leve e nativa sem frameworks pesados em `server/index.mjs`, rodando por padrão na porta `3001`. Runtime Node deve oferecer suporte a `node:sqlite`. |
-| **Persistência de Dados** | **SQLite local (`data/safezone.db`)** | Tabelas estruturadas para conteúdos, flashcards, sessões de estudo, exames e configurações |
-| **Armazenamento de Arquivos** | **Local (`data/uploads/`)** | PDFs originais de até 50 MB salvos localmente e vinculados aos conteúdos |
-| **Extração de Conteúdo** | **PDF.js (`pdfjs-dist`), Readability, Cheerio** | Extração de texto de PDFs (com texto selecionável) e higienização de páginas web |
-| **IA & LLMs** | **Multi-Provider** | Suporte a Google Gemini (padrão), OpenAI, Anthropic Claude, Azure OpenAI, Ollama/local e OmniRoute |
+| **Nomenclatura de Estilos** | **Sufixo `Stl` Recomendado em novos componentes** | Componentes criados com styled-components devem preferencialmente adotar o sufixo `Stl` (ex: `MultipleChoiceCardStl`, `ExamTrapCalloutStl`, `DecisionMatrixStl`) para clareza visual. |
+| **BaaS & Autenticação** | **Supabase (`@supabase/supabase-js`)** | Autenticação por e-mail e senha, JWT, perfis em `profiles` e isolamento estrito via RLS (`auth.uid() = user_id`) |
+| **Persistência de Dados** | **PostgreSQL no Supabase** | Tabelas estruturadas (`profiles`, `contents`, `flashcards`, `study_sessions`, `settings`) com migração DDL em `supabase/migrations/` |
+| **Armazenamento de Arquivos** | **Supabase Storage (`study-assets`)** | Upload de apostilas e PDFs originais em bucket privado com acesso controlado por usuário |
+| **Keep-Alive BaaS** | **GitHub Actions (`supabase-keepalive.yml`)** | Disparo de ping a cada 48h para evitar a pausa de 72h no Supabase free tier |
+| **Extração de Conteúdo** | **Markdown Parser, PDF.js (`pdfjs-dist`), Readability, Cheerio** | Ingestão e chunking semântico de `.md` do NotebookLM por títulos (`#`, `##`, `###`), PDFs e páginas web |
+| **IA & LLMs** | **Multi-Provider (Gemini + NVIDIA NIM)** | Google Gemini (padrão via API oficial) e conector OpenAI-compatible para NVIDIA NIM (`meta/llama-3.3-70b-instruct`). Suporte a OpenAI, Anthropic, Azure OpenAI e Ollama local. |
 | **Algoritmo de Aprendizado** | **SM-2 (SuperMemo 2)** | Cálculo de repetição espaçada em `src/utils/sm2.ts` com 4 notas (`again`, `hard`, `good`, `easy`) |
 | **Qualidade & Linting** | **Oxlint (`oxlint`)** | Linter ultrarrápido configurado em `.oxlintrc.json` |
 | **Análise de Grafo** | **Madge / graphify** | Detecção de ciclos e visualização de dependências |
-| **Testes Funcionais / E2E** | **Playwright (`@playwright/test`)** | Execução de testes de rotas e fluxos críticos com Chromium headless integrado |
+| **Testes Funcionais / E2E** | **Playwright (`@playwright/test`)** | Suíte de testes funcionais E2E com Chromium headless integrado |
 
 ---
 
@@ -155,18 +157,15 @@ Ao atuar no projeto **SafeZone Studies**:
 | Comando | Descrição |
 | :--- | :--- |
 | `npm install` | Instala todas as dependências do projeto |
-| `npm run dev` | Inicia a orquestração completa: API Node (`server/index.mjs` na porta 3001) e Vite (porta 5173) |
-| `npm run server` | Inicia exclusivamente o servidor da API Node.js |
+| `npm run dev` | Inicia o servidor frontend Vite da aplicação (porta 5173) |
 | `npm run build` | Compila o TypeScript (`tsc -b`) e gera o bundle de produção via Vite em `dist/` |
 | `npm run preview` | Executa um servidor local servindo a pasta de produção `dist/` na porta 4173 |
 | `npm run lint` | Executa a verificação estática de código com Oxlint |
+| `npm run test:e2e` | Executa a suíte de testes funcionais E2E com Playwright em modo headless |
+| `npm run db:migrate-sqlite`| Executa a migração de dados do SQLite local legado (`data/safezone.db`) para o Supabase |
 | `npm run graph:generate` | Gera o relatório de dependências de `src/` via Madge |
 | `npm run graph:circular` | Varre `src/` em busca de dependências circulares |
 | `npm run graph:deps` | Exibe o resumo quantitativo de dependências de `src/` |
-| `npx playwright test` | Executa a suíte de testes funcionais E2E com Playwright em modo headless |
-| `npx playwright test --ui` | Executa os testes no modo interativo visual com timeline e DOM snapshot |
-| `npm audit` | Varre as dependências do `package.json` em busca de CVEs conhecidas |
-| `npx semgrep scan --config auto` | Executa varredura estática de segurança (SAST) no código-fonte |
 
 ### 3.1 Orquestração Dev Unificada (`npm run dev`)
 
@@ -464,3 +463,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | :--- | :--- | :--- |
 | 2026-11-12 | Agente IA | Padronização integral do `AGENTS.md` com base no Modelo Base Universal (`g:\Meu Drive\(00- DOCUMENTOS)\08 - Modelos_IA\00 - Agents\Agents.md`): inclusão das 6 regras mandatórias (atualização contínua de documentação, fluxo estrito de Git em branches, decomposição de issues em formato copiável/Linear, diretório obrigatório `00-anything/`, fidelidade ao domínio SafeZone Studies e mapeamento com Madge/graphify), detalhamento completo da stack técnica (React 19, Vite 8, Node.js SQLite nativo), mapeamento da árvore real de arquivos, documentação do sistema de tema (`src/theme/`), estratégia inteligente de testes com Playwright (detecção de navegadores locais no Windows), estratégia de segurança SAST e checklist de encerramento de tarefas. |
 | 2026-11-12 | Agente IA | Consolidação unificada de todo o contexto técnico, rotas da API, regras de ingestão e detalhes de negócio de `contextoIa/README.md` exclusivamente para este `AGENTS.md`. Remoção do diretório `contextoIa/` tornando `AGENTS.md` a única fonte da verdade do projeto. |
+| 2026-11-12 | Agente IA | Implementação completa da reestruturação arquitetural (Fases 1 a 4 do design doc em `00-anything/01 - reestruturacao supabase md notebooklm 2026-11-12/reestruturacao_supabase_notebooklm_30_70.md`): migração para Supabase BaaS (PostgreSQL + RLS + Supabase Auth e Storage), ingestão semântica de notas Markdown (.md) do Google NotebookLM particionadas por títulos (#, ##, ###), suporte a NVIDIA NIM (Llama 3.3 70B via OpenAI-compatible proxy /api/nvidia) mantendo Google Gemini como padrão e descontinuando OmniRoute, metodologia de estudo 30/70 bifásica com componentes `ExamTrapCallout`, `DecisionMatrix` e `MultipleChoiceCard` integrados ao algoritmo SM-2 na escala nominal de 1 a 4, automação de keep-alive a cada 48h via GitHub Actions, script de migração SQLite legado `scripts/migrate-sqlite-to-supabase.mjs` e testes E2E com Playwright. |

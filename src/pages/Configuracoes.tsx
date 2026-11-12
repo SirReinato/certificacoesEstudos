@@ -277,12 +277,12 @@ const FileInput = styled.input`
 `;
 
 const DEFAULT_AI_MODELS: Record<NonNullable<UserSettings['ai']['provider']>, string> = {
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-3.1-flash-lite',
+  nvidia: 'meta/llama-3.3-70b-instruct',
   openai: 'gpt-4o-mini',
   'azure-openai': 'gpt-4o-mini',
   anthropic: 'claude-3-5-sonnet-latest',
   local: 'llama3.1',
-  omniroute: 'auto',
 };
 
 const KeyRow = styled.div`
@@ -707,12 +707,12 @@ export function Configuracoes() {
               value={aiProvider}
               onChange={(e) => handleAIProviderChange(e.target.value as NonNullable<UserSettings['ai']['provider']>)}
             >
-              <option value="gemini">Google Gemini</option>
+              <option value="gemini">Google Gemini (Padrão)</option>
+              <option value="nvidia">NVIDIA NIM (Llama 3.3 / Mistral)</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
               <option value="azure-openai">Azure OpenAI</option>
               <option value="local">Local (Ollama)</option>
-              <option value="omniroute">OmniRoute (Gateway)</option>
             </Select>
           </SettingControl>
         </SettingRow>
@@ -737,7 +737,7 @@ export function Configuracoes() {
           <SettingInfo>
             <SettingLabel>Chave de API</SettingLabel>
             <SettingDescription>
-              Salva apenas no IndexedDB deste navegador. Uma chave válida é necessária para gerar flashcards.
+              Armazenada com segurança na sua conta no Supabase com isolamento de perfil (RLS).
             </SettingDescription>
           </SettingInfo>
           <SettingControl>
@@ -764,7 +764,7 @@ export function Configuracoes() {
             <SettingDescription>
               {aiProvider === 'local'
                 ? 'Modelos locais não exigem chave — informe o endpoint do Ollama.'
-                : 'A chave permite gerar flashcards com base nos objetivos do exame.'}
+                : 'A chave permite gerar apostila 30/70 e questões práticas para AI-200 / AI-103.'}
             </SettingDescription>
           </SettingInfo>
           <SettingControl>
@@ -776,15 +776,15 @@ export function Configuracoes() {
           </SettingControl>
         </SettingRow>
 
-        {(aiProvider === 'local' || aiProvider === 'azure-openai' || aiProvider === 'omniroute') && (
+        {(aiProvider === 'local' || aiProvider === 'azure-openai' || aiProvider === 'nvidia') && (
           <SettingRow>
             <SettingInfo>
-              <SettingLabel>Endpoint</SettingLabel>
+              <SettingLabel>Endpoint customizado (opcional)</SettingLabel>
               <SettingDescription>
                 {aiProvider === 'local'
                   ? 'Ex: http://localhost:11434/api/generate'
-                  : aiProvider === 'omniroute'
-                    ? 'Ex: http://localhost:20128/v1 (base do OmniRoute)'
+                  : aiProvider === 'nvidia'
+                    ? 'Padrão proxy automático: /api/nvidia/v1/chat/completions'
                     : 'Ex: https://SEU-RECURSO.openai.azure.com'}
               </SettingDescription>
             </SettingInfo>
@@ -792,7 +792,7 @@ export function Configuracoes() {
               <Input
                 type="url"
                 value={aiEndpoint}
-                placeholder={aiProvider === 'local' ? 'http://localhost:11434/api/generate' : aiProvider === 'omniroute' ? 'http://localhost:20128/v1' : 'https://seu-recurso.openai.azure.com'}
+                placeholder={aiProvider === 'local' ? 'http://localhost:11434/api/generate' : aiProvider === 'nvidia' ? '/api/nvidia/v1/chat/completions' : 'https://seu-recurso.openai.azure.com'}
                 onChange={(e) => setAiEndpoint(e.target.value)}
                 onBlur={handleAIEndpointSave}
                 spellCheck={false}

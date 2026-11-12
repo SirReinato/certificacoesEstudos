@@ -159,9 +159,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
+      '/api/nvidia': {
+        target: 'https://integrate.api.nvidia.com',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/nvidia/, ''),
       },
     },
   },
@@ -169,9 +170,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 4173,
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
+      '/api/nvidia': {
+        target: 'https://integrate.api.nvidia.com',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/nvidia/, ''),
       },
     },
   },

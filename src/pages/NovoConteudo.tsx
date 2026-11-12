@@ -407,8 +407,15 @@ const ToastAction = styled.button`
 export function NovoConteudo() {
   const theme = useTheme();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'pdf' | 'link' | 'text'>('pdf');
+  const [activeTab, setActiveTab] = useState<'markdown' | 'pdf' | 'link' | 'text'>('markdown');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Markdown (NotebookLM) state
+  const [mdFile, setMdFile] = useState<File | null>(null);
+  const [mdContent, setMdContent] = useState('');
+  const [mdTitle, setMdTitle] = useState('');
+  const [mdTags, setMdTags] = useState('notebooklm, azure');
+  const mdFileInputRef = useRef<HTMLInputElement>(null);
   
   // PDF state
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -433,6 +440,7 @@ export function NovoConteudo() {
     processing,
     progress,
     error,
+    processMarkdown,
     processPDF,
     processLink,
     processText,
@@ -450,6 +458,57 @@ export function NovoConteudo() {
       showToast(error, 'error');
     }
   }, [error, showToast]);
+
+  // Markdown handlers
+  const handleMdDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.md') || file.type === 'text/markdown' || file.type === 'text/plain')) {
+      setMdFile(file);
+      if (!mdTitle) setMdTitle(file.name.replace(/\.md$/i, ''));
+    } else {
+      showToast('Por favor, selecione um arquivo Markdown (.md) válido', 'error');
+    }
+  }, [mdTitle, showToast]);
+
+  const handleMdFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && (file.name.endsWith('.md') || file.type === 'text/markdown' || file.type === 'text/plain')) {
+      setMdFile(file);
+      if (!mdTitle) setMdTitle(file.name.replace(/\.md$/i, ''));
+    } else if (file) {
+      showToast('Por favor, selecione um arquivo Markdown (.md) válido', 'error');
+    }
+  }, [mdTitle, showToast]);
+
+  const removeMdFile = useCallback(() => {
+    setMdFile(null);
+    setMdTitle('');
+  }, []);
+
+  const handleMarkdownSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validation = validate('markdown', {
+      title: mdTitle,
+      file: mdFile || undefined,
+      text: mdContent || undefined,
+    });
+    if (!validation.valid) {
+      showToast(validation.errors[0], 'error');
+      return;
+    }
+
+    try {
+      const payload = mdFile || mdContent;
+      const tags = mdTags.split(',').map((t) => t.trim()).filter(Boolean);
+      const result = await processMarkdown(payload, mdTitle, tags);
+      showToast(`Notas do NotebookLM processadas! ${result.content.flashcardsCount} questões geradas.`, 'success');
+      navigate('/biblioteca');
+    } catch {
+      // Erro tratado pelo useEffect via hook error state
+    }
+  }, [mdFile, mdContent, mdTitle, mdTags, validate, processMarkdown, showToast, navigate]);
 
   // PDF handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -583,6 +642,15 @@ export function NovoConteudo() {
           <TabNav role="tablist" aria-label="Tipo de conteúdo">
             <TabButton
               role="tab"
+              aria-selected={activeTab === 'markdown'}
+              active={activeTab === 'markdown'}
+              onClick={() => setActiveTab('markdown')}
+              disabled={processing}
+            >
+              📝 Markdown (NotebookLM)
+            </TabButton>
+            <TabButton
+              role="tab"
               aria-selected={activeTab === 'pdf'}
               active={activeTab === 'pdf'}
               onClick={() => setActiveTab('pdf')}
@@ -609,6 +677,102 @@ export function NovoConteudo() {
               ✏️ Texto
             </TabButton>
           </TabNav>
+
+          {/* Markdown (NotebookLM) Tab */}
+          <FormSection visible={activeTab === 'markdown'}>
+            <form onSubmit={handleMarkdownSubmit}>
+              <SectionTitle>Notas Markdown (.md) do NotebookLM</SectionTitle>
+              <SectionDesc>
+                Faça upload do arquivo .md gerado pelo Google NotebookLM ou cole o texto. O material será fatiado semanticamente por tópicos para gerar apostila teórica e questões práticas 30/70.
+              </SectionDesc>
+
+              <FormGroup>
+                <Label htmlFor="md-file">Arquivo Markdown (.md)</Label>
+                <DropZone
+                  active={false}
+                  $hasFile={!!mdFile}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={handleMdDrop}
+                  onClick={() => mdFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={mdFileInputRef}
+                    id="md-file"
+                    type="file"
+                    accept=".md,text/markdown,text/plain"
+                    style={{ display: 'none' }}
+                    onChange={handleMdFileSelect}
+                    disabled={processing}
+                  />
+                  {!mdFile ? (
+                    <>
+                      <DropZoneIcon>📥</DropZoneIcon>
+                      <DropZoneText>
+                        <strong>Arraste seu arquivo .md do NotebookLM aqui</strong> ou clique para navegar
+                      </DropZoneText>
+                      <HelperText>Aceita arquivos Markdown (.md) até 20MB</HelperText>
+                    </>
+                  ) : (
+                    <FileInfo>
+                      <FileName>📄 {mdFile.name} ({(mdFile.size / 1024).toFixed(1)} KB)</FileName>
+                      <RemoveFileButton
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeMdFile();
+                        }}
+                      >
+                        Remover
+                      </RemoveFileButton>
+                    </FileInfo>
+                  )}
+                </DropZone>
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="md-content">Ou cole o texto Markdown diretamente (opcional se enviou arquivo)</Label>
+                <Textarea
+                  id="md-content"
+                  placeholder="# Domínio 1: Planejar Soluções de IA...&#10;&#10;Cole aqui as anotações do NotebookLM..."
+                  value={mdContent}
+                  onChange={(e) => setMdContent(e.target.value)}
+                  disabled={processing || !!mdFile}
+                  style={{ minHeight: '140px' }}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="md-title">Título do Conteúdo *</Label>
+                <Input
+                  id="md-title"
+                  type="text"
+                  placeholder="Ex: NotebookLM - AI-200 Domínio 1 e 2"
+                  value={mdTitle}
+                  onChange={(e) => setMdTitle(e.target.value)}
+                  required
+                  disabled={processing}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="md-tags">Tags (separadas por vírgula)</Label>
+                <Input
+                  id="md-tags"
+                  type="text"
+                  placeholder="Ex: ai-200, notebooklm, azure, visão"
+                  value={mdTags}
+                  onChange={(e) => setMdTags(e.target.value)}
+                  disabled={processing}
+                />
+              </FormGroup>
+
+              <SubmitButton type="submit" disabled={processing || (!mdFile && !mdContent.trim())}>
+                {processing ? 'Processando Markdown...' : '🤖 Gerar Apostila 30/70 e Questões'}
+              </SubmitButton>
+            </form>
+          </FormSection>
 
           {/* PDF Tab */}
           <FormSection visible={activeTab === 'pdf'}>
@@ -833,8 +997,17 @@ export function NovoConteudo() {
         <ProcessingOverlay>
           <ProcessingCard>
             <Spinner />
-            <ProcessingTitle>{activeTab === 'pdf' ? 'Processando PDF...' : activeTab === 'link' ? 'Analisando link...' : 'Analisando texto...'}</ProcessingTitle>
+            <ProcessingTitle>
+              {activeTab === 'markdown'
+                ? 'Processando Notas do NotebookLM...'
+                : activeTab === 'pdf'
+                ? 'Processando PDF...'
+                : activeTab === 'link'
+                ? 'Analisando link...'
+                : 'Analisando texto...'}
+            </ProcessingTitle>
             <ProcessingText>
+              {activeTab === 'markdown' && 'Fatiando semanticamente e gerando apostila teórica e questões 30/70...'}
               {activeTab === 'pdf' && 'Extraindo texto e preparando apostila e questões...'}
               {activeTab === 'link' && 'Buscando conteúdo para montar apostila e questões...'}
               {activeTab === 'text' && 'Preparando apostila de estudo e questões...'}
