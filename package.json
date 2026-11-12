@@ -1,0 +1,41 @@
+{
+  "name": "certificacoesestudos",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "trap 'kill 0' EXIT; node server/index.mjs & vite",
+    "server": "node server/index.mjs",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "graph:generate": "madge --extensions ts,tsx src/",
+    "graph:circular": "madge --circular --extensions ts,tsx src/",
+    "graph:deps": "madge --summary --extensions ts,tsx src/"
+  },
+  "dependencies": {
+    "@types/pdf-parse": "^1.1.5",
+    "cheerio": "^1.2.0",
+    "dexie": "^4.4.7",
+    "idb": "^8.0.4",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4",
+    "readability": "^0.1.0",
+    "styled-components": "^6.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/styled-components": "^5.1.36",
+    "@vitejs/plugin-react": "^6.1.2",
+    "madge": "^8.0.0",
+    "oxlint": "^1.88.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}
