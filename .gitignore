@@ -17,6 +17,7 @@ dist-ssr
 data/*.db
 data/*.db-*
 data/uploads/
+graphify-out/
 
 # Editor directories and files
 .vscode/*
