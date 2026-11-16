@@ -1,7 +1,7 @@
 /**
  * AI Service — Geração de apostilas e questões via IA
- * Integração com APIs (OpenAI, Anthropic, Azure OpenAI, Gemini, Local)
- * Prompts otimizados para AI-200 / AI-103
+ * Integração com APIs (Gemini, NVIDIA NIM, OpenAI, Anthropic, Azure OpenAI, Local)
+ * Prompts otimizados para AI-200 / AI-103 e Metodologia 30/70
  */
 
 import type {
@@ -9,20 +9,10 @@ import type {
   TextChunk,
   AIGeneratedFlashcards,
   ExamSkill,
+  AIConfig,
 } from '../types';
 
-// ============================================
-// CONFIGURAÇÃO DE IA
-// ============================================
-
-export interface AIConfig {
-  provider: 'openai' | 'anthropic' | 'azure-openai' | 'gemini' | 'local' | 'omniroute';
-  apiKey?: string;
-  endpoint?: string;       // para Azure OpenAI, Local ou OmniRoute
-  model: string;
-  temperature: number;
-  maxTokens: number;
-}
+export { type AIConfig };
 
 export const defaultAIConfig: AIConfig = {
   provider: 'gemini',
@@ -32,25 +22,56 @@ export const defaultAIConfig: AIConfig = {
 };
 
 // ============================================
-// PROMPTS ESPECIALIZADOS
+// PROMPTS ESPECIALIZADOS (30% Teoria / 70% Prática)
 // ============================================
 
-const SYSTEM_PROMPT = `Você é um especialista em Azure. Gere material de estudo e questões em JSON puro.
-Use somente as informações do conteúdo fornecido; não invente fatos. NÃO use comentários.
-Gere uma apostila concisa e didática para a etapa de conteúdo (aproximadamente 30% do tempo de estudo), organizada em seções. O conteúdo de cada seção deve ser texto puro, sem sintaxe Markdown.
-Gere questões práticas para a etapa de exercícios (aproximadamente 70% do estudo). Flashcards devem conter SOMENTE questões, nunca cartões de definição ou teoria.
-A estrutura deve ser exatamente:
+const SYSTEM_PROMPT = `Você é um especialista sênior em certificações Microsoft Azure (AI-200 e AI-103).
+Gere material de estudo de alta precisão e questões práticas rigorosas em formato JSON puro.
+Use estritamente as informações do conteúdo fornecido; não invente fatos nem mencione dados não suportados.
+
+Diretrizes da metodologia 30/70:
+1. ETAPA DE CONTEÚDO (30% do estudo): Gere uma apostila estruturada em seções.
+   - Em cada seção, forneça explicação teórica densa, clara e didática.
+   - Identifique e extraia armadilhas de exame da Microsoft (gotchas) e pegadinhas de prova frequentes no array "gotchas".
+   - Quando houver comparação entre 2 ou mais tecnologias ou SKUs (ex: Custom Vision vs Computer Vision, LUIS vs Conversational Language Understanding, etc.), gere uma tabela comparativa com "headers" e "rows" em "comparisonTable".
+
+2. ETAPA DE PRÁTICA (70% do estudo): Gere questões práticas no array "flashcards".
+   - Flashcards devem conter SOMENTE questões práticas ou cenários de exame da Microsoft. NUNCA gere cartões de mera definição ou teoria.
+   - Pelo menos metade das questões geradas devem ser do formato "multiple-choice" (múltipla escolha com 4 opções A, B, C, D), com distratores plausíveis e justificativa detalhada para cada alternativa.
+   - As demais podem ser "flip" (pergunta direta e resposta explicada).
+
+ESTRUTURA JSON EXATA OBRIGATÓRIA:
 {
   "studyGuide": [
-    { "title": "Título da seção", "content": "Explicação didática com exemplos e detalhes relevantes." }
+    {
+      "title": "Título da Seção",
+      "content": "Explicação teórica aprofundada.",
+      "gotchas": [
+        "Atenção: O serviço X exige formato Y, diferente do serviço Z."
+      ],
+      "comparisonTable": {
+        "headers": ["Critério", "Serviço A", "Serviço B"],
+        "rows": [
+          ["Finalidade", "Classificação personalizada", "Detecção geral pré-treinada"]
+        ]
+      }
+    }
   ],
   "flashcards": [
     {
-      "front": "Pergunta terminada em ?",
-      "back": "Resposta correta com explicação baseada na fonte",
-      "tags": ["tag1"],
+      "front": "Cenário de arquitetura ou pergunta terminada em ?",
+      "back": "Resposta correta e raciocínio técnico",
+      "format": "multiple-choice",
+      "options": [
+        { "id": "A", "text": "Texto da alternativa A", "isCorrect": true, "explanation": "Por que esta opção atende ao requisito." },
+        { "id": "B", "text": "Texto da alternativa B", "isCorrect": false, "explanation": "Por que esta opção é incorreta." },
+        { "id": "C", "text": "Texto da alternativa C", "isCorrect": false, "explanation": "Por que esta opção é incorreta." },
+        { "id": "D", "text": "Texto da alternativa D", "isCorrect": false, "explanation": "Por que esta opção é incorreta." }
+      ],
+      "explanation": "Explicação técnica detalhada baseada na documentação oficial.",
+      "tags": ["azure-ai", "visao-computacional"],
       "difficulty": "medium",
-      "importance": 5,
+      "importance": 8,
       "kind": "question"
     }
   ]
@@ -192,6 +213,8 @@ async function fetchWithTimeout(
 
 async function callAIProvider(prompt: string, config: AIConfig): Promise<string> {
   switch (config.provider) {
+    case 'nvidia':
+      return callNvidia(prompt, config);
     case 'openai':
       return callOpenAI(prompt, config);
     case 'anthropic':
@@ -202,39 +225,84 @@ async function callAIProvider(prompt: string, config: AIConfig): Promise<string>
       return callGemini(prompt, config);
     case 'local':
       return callLocal(prompt, config);
-    case 'omniroute':
-      return callOmniRoute(prompt, config);
     default:
       throw new Error(`Provider não suportado: ${config.provider}`);
   }
+}
+
+export async function callOpenAICompatible(options: {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  prompt: string;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<string> {
+  const response = await fetchWithTimeout(options.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${options.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: options.model,
+      messages: [{ role: 'user', content: options.prompt }],
+      temperature: options.temperature ?? 0.3,
+      max_tokens: options.maxTokens ?? 4096,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const error = await response.json();
+      detail = error?.error?.message || error?.message || detail;
+    } catch {
+      try {
+        detail = (await response.text()).slice(0, 300) || detail;
+      } catch {
+        // mantém statusText
+      }
+    }
+    throw new Error(`API error (${response.status}): ${detail}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
+  const apiKey = config.apiKey || import.meta.env.VITE_NVIDIA_API_KEY;
+  if (!apiKey) throw new Error('NVIDIA NIM API key não configurada');
+
+  // Em dev/preview usa o proxy do Vite para evitar bloqueio de CORS no browser
+  const endpoint = config.endpoint
+    ? config.endpoint
+    : '/api/nvidia/v1/chat/completions';
+
+  return callOpenAICompatible({
+    endpoint,
+    apiKey,
+    model: config.model || 'meta/llama-3.3-70b-instruct',
+    prompt,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+  });
 }
 
 async function callOpenAI(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) throw new Error('OpenAI API key não configurada');
 
-  const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: config.temperature,
-      max_tokens: config.maxTokens,
-      response_format: { type: 'json_object' },
-    }),
+  return callOpenAICompatible({
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    apiKey,
+    model: config.model,
+    prompt,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`OpenAI error: ${error.error?.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || '';
 }
 
 async function callAnthropic(prompt: string, config: AIConfig): Promise<string> {
@@ -381,56 +449,8 @@ async function callLocal(prompt: string, config: AIConfig): Promise<string> {
   return data.response || '';
 }
 
-function resolveOmniRouteEndpoint(endpoint?: string): string {
-  const raw = (endpoint || 'http://localhost:20128/v1').trim().replace(/\/+$/, '');
-  // Aceita tanto a URL completa quanto a base exposta pela UI ("/v1").
-  if (/\/chat\/completions$/i.test(raw)) return raw;
-  if (/\/v1$/i.test(raw)) return `${raw}/chat/completions`;
-  return `${raw}/v1/chat/completions`;
-}
-
-async function callOmniRoute(prompt: string, config: AIConfig): Promise<string> {
-  const apiKey = config.apiKey || import.meta.env.VITE_OMNIROUTE_API_KEY;
-  if (!apiKey) throw new Error('OmniRoute API key não configurada');
-
-  const endpoint = resolveOmniRouteEndpoint(config.endpoint);
-
-  const response = await fetchWithTimeout(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: config.temperature,
-      max_tokens: config.maxTokens,
-      response_format: { type: 'json_object' },
-    }),
-  });
-
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const error = await response.json();
-      detail = error?.error?.message || error?.message || detail;
-    } catch {
-      try {
-        detail = (await response.text()).slice(0, 300) || detail;
-      } catch {
-        // mantém statusText
-      }
-    }
-    throw new Error(`OmniRoute error: ${detail} (URL: ${endpoint})`);
-  }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || '';
-}
-
 // ============================================
-// PARSING & UTILS
+// PARSING & UTILS (30/70 Engine)
 // ============================================
 
 function parseAIResponse(response: string): AIGeneratedFlashcards {
@@ -439,8 +459,6 @@ function parseAIResponse(response: string): AIGeneratedFlashcards {
     let jsonStr = response.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '');
 
     // 2. Tenta fechar estruturas abertas se o JSON estiver cortado
-    // Fecha uma string truncada e descarta lixo parcial posterior, depois fecha
-    // arrays/objetos não encerrados de acordo com a pilha de abertura.
     const lastQuote = jsonStr.lastIndexOf('"');
     const lastClosing = Math.max(jsonStr.lastIndexOf('}'), jsonStr.lastIndexOf(']'));
     if (lastQuote > lastClosing) {
@@ -485,9 +503,8 @@ function parseAIResponse(response: string): AIGeneratedFlashcards {
 
     jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
 
-    // 4. Reparo de vírgulas
+    // 4. Reparo de vírgulas e quebras
     jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
-    // Normaliza quebras de linha
     jsonStr = jsonStr.replace(/\r\n|\r/g, '\n');
 
     const parsed = JSON.parse(jsonStr);
@@ -498,20 +515,68 @@ function parseAIResponse(response: string): AIGeneratedFlashcards {
 
     return {
       studyGuide: parsed.studyGuide
-        .map((section: Record<string, unknown>) => ({
-          title: String(section.title || '').trim(),
-          content: String(section.content || '').trim(),
-        }))
+        .map((section: Record<string, unknown>) => {
+          const title = String(section.title || '').trim();
+          const content = String(section.content || '').trim();
+          const gotchas = Array.isArray(section.gotchas)
+            ? section.gotchas.map((g: unknown) => String(g).trim()).filter(Boolean)
+            : undefined;
+
+          let comparisonTable = undefined;
+          if (
+            section.comparisonTable &&
+            typeof section.comparisonTable === 'object' &&
+            Array.isArray((section.comparisonTable as Record<string, unknown>).headers) &&
+            Array.isArray((section.comparisonTable as Record<string, unknown>).rows)
+          ) {
+            const table = section.comparisonTable as { headers: unknown[]; rows: unknown[][] };
+            comparisonTable = {
+              headers: table.headers.map((h) => String(h).trim()),
+              rows: table.rows.map((r) => (Array.isArray(r) ? r.map((cell) => String(cell).trim()) : [])),
+            };
+          }
+
+          return {
+            title,
+            content,
+            gotchas: gotchas && gotchas.length > 0 ? gotchas : undefined,
+            comparisonTable,
+          };
+        })
         .filter((section: { title: string; content: string }) => section.title && section.content),
+
       flashcards: parsed.flashcards
-        .map((fc: Record<string, unknown>) => ({
-          front: String(fc.front || '').trim(),
-          back: String(fc.back || '').trim(),
-          tags: Array.isArray(fc.tags) ? fc.tags.map(String) : [],
-          difficulty: ['easy', 'medium', 'hard'].includes(String(fc.difficulty)) ? fc.difficulty as 'easy' | 'medium' | 'hard' : 'medium',
-          importance: typeof fc.importance === 'number' ? Math.max(1, Math.min(10, fc.importance)) : 5,
-          kind: 'question' as const,
-        }))
+        .map((fc: Record<string, unknown>) => {
+          const front = String(fc.front || '').trim();
+          const back = String(fc.back || '').trim();
+          const explanation = fc.explanation ? String(fc.explanation).trim() : undefined;
+
+          let options = undefined;
+          if (Array.isArray(fc.options) && fc.options.length >= 2) {
+            options = fc.options.map((opt: Record<string, unknown>, idx: number) => ({
+              id: (opt.id || ['A', 'B', 'C', 'D'][idx] || String(idx + 1)) as 'A' | 'B' | 'C' | 'D',
+              text: String(opt.text || opt.label || '').trim(),
+              isCorrect: Boolean(opt.isCorrect || opt.correct),
+              explanation: opt.explanation ? String(opt.explanation).trim() : '',
+            }));
+          }
+
+          const format = options && options.length >= 2 ? 'multiple-choice' : (fc.format === 'multiple-choice' ? 'multiple-choice' : 'flip');
+
+          return {
+            front,
+            back,
+            explanation,
+            format: format as 'flip' | 'multiple-choice',
+            options,
+            tags: Array.isArray(fc.tags) ? fc.tags.map(String) : [],
+            difficulty: ['easy', 'medium', 'hard'].includes(String(fc.difficulty))
+              ? (fc.difficulty as 'easy' | 'medium' | 'hard')
+              : 'medium',
+            importance: typeof fc.importance === 'number' ? Math.max(1, Math.min(10, fc.importance)) : 5,
+            kind: 'question' as const,
+          };
+        })
         .filter((fc: { front: string; back: string }) => fc.front && fc.back),
     };
   } catch (error) {

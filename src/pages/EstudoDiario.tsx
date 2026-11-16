@@ -9,6 +9,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../theme';
 import { useStudySession } from '../hooks/useStudySession';
 import { contentService } from '../storage';
+import { ExamTrapCallout } from '../components/study/ExamTrapCallout';
+import { DecisionMatrix } from '../components/study/DecisionMatrix';
+import { MultipleChoiceCard } from '../components/study/MultipleChoiceCard';
 import type { StudyGuideSection } from '../types';
 
 const PageHeader = styled.div`
@@ -595,6 +598,8 @@ export function EstudoDiario() {
               <StudySection key={`${section.title}-${index}`}>
                 <StudySectionTitle>{section.title}</StudySectionTitle>
                 <StudySectionText>{section.content}</StudySectionText>
+                <ExamTrapCallout traps={section.gotchas || []} />
+                <DecisionMatrix table={section.comparisonTable} />
               </StudySection>
             ))}
             <StudyActions>
@@ -730,53 +735,64 @@ export function EstudoDiario() {
         <PhaseIndicator>
           ✍️ Etapa 2 de 2 — Questões (70%) · recuperação ativa
         </PhaseIndicator>
-        <Flashcard onClick={flipCard} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && flipCard()} aria-label="Virar card">
-          <FlashcardInner flipped={flipped}>
-            <FlashcardFace>
-              <CardTag bg="#dbeafe" color="#1d4ed8">
-                ❓ Questão
-                {currentCard.tags[0] ? ` · ${currentCard.tags[0]}` : ''}
-              </CardTag>
-              <CardContent>{currentCard.front}</CardContent>
-              <CardSource>📖 {currentCard.tags.join(', ') || 'Conteúdo'}</CardSource>
-              <FlipHint>💡 Clique ou pressione Espaço para virar</FlipHint>
-            </FlashcardFace>
-            <FlashcardBack>
-              <CardTag bg="#ede9fe" color="#7c3aed">Resposta</CardTag>
-              <CardContent>{currentCard.back}</CardContent>
-              <CardSource>📖 {currentCard.tags.join(', ') || 'Conteúdo'}</CardSource>
-              <FlipHint>💡 Clique para voltar</FlipHint>
-            </FlashcardBack>
-          </FlashcardInner>
-        </Flashcard>
 
-        <div style={{ textAlign: 'center', color: theme.colors.text.tertiary, fontSize: theme.fontSizes.xs, marginBottom: theme.spacing[2] }}>
-          Atalhos: Espaço — virar carta · 1 Novamente · 2 Difícil · 3 Bom · 4 Fácil
-        </div>
+        {currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2 ? (
+          <MultipleChoiceCard
+            key={currentCard.id}
+            card={currentCard}
+            onGrade={(rating) => handleAnswer(rating)}
+          />
+        ) : (
+          <>
+            <Flashcard onClick={flipCard} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && flipCard()} aria-label="Virar card">
+              <FlashcardInner flipped={flipped}>
+                <FlashcardFace>
+                  <CardTag bg="#dbeafe" color="#1d4ed8">
+                    ❓ Questão
+                    {currentCard.tags[0] ? ` · ${currentCard.tags[0]}` : ''}
+                  </CardTag>
+                  <CardContent>{currentCard.front}</CardContent>
+                  <CardSource>📖 {currentCard.tags.join(', ') || 'Conteúdo'}</CardSource>
+                  <FlipHint>💡 Clique ou pressione Espaço para virar</FlipHint>
+                </FlashcardFace>
+                <FlashcardBack>
+                  <CardTag bg="#ede9fe" color="#7c3aed">Resposta</CardTag>
+                  <CardContent>{currentCard.back}</CardContent>
+                  <CardSource>📖 {currentCard.tags.join(', ') || 'Conteúdo'}</CardSource>
+                  <FlipHint>💡 Clique para voltar</FlipHint>
+                </FlashcardBack>
+              </FlashcardInner>
+            </Flashcard>
 
-        {flipped && (
-          <div style={{ textAlign: 'center', color: theme.colors.text.tertiary, fontSize: theme.fontSizes.sm, marginBottom: theme.spacing[2] }}>
-            Como foi a resposta?
-          </div>
-        )}
+            <div style={{ textAlign: 'center', color: theme.colors.text.tertiary, fontSize: theme.fontSizes.xs, marginBottom: theme.spacing[2] }}>
+              Atalhos: Espaço — virar carta · 1 Novamente · 2 Difícil · 3 Bom · 4 Fácil
+            </div>
 
-        {flipped && (
-          <RatingButtons role="group" aria-label="Avaliar dificuldade do card">
-            {ratings.map((r) => (
-              <RatingButton
-                key={r.key}
-                color={r.color}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAnswer(r.key);
-                  setFlipped(false);
-                }}
-              >
-                {r.label}
-                <RatingLabel>{r.desc}</RatingLabel>
-              </RatingButton>
-            ))}
-          </RatingButtons>
+            {flipped && (
+              <div style={{ textAlign: 'center', color: theme.colors.text.tertiary, fontSize: theme.fontSizes.sm, marginBottom: theme.spacing[2] }}>
+                Como foi a resposta?
+              </div>
+            )}
+
+            {flipped && (
+              <RatingButtons role="group" aria-label="Avaliar dificuldade do card">
+                {ratings.map((r) => (
+                  <RatingButton
+                    key={r.key}
+                    color={r.color}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAnswer(r.key);
+                      setFlipped(false);
+                    }}
+                  >
+                    {r.label}
+                    <RatingLabel>{r.desc}</RatingLabel>
+                  </RatingButton>
+                ))}
+              </RatingButtons>
+            )}
+          </>
         )}
       </FlashcardContainer>
     </div>

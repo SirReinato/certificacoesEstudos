@@ -51,7 +51,7 @@ export function useStudySession() {
 
     if (allCards.length === 0) return null;
 
-    const questionCards = allCards.filter((card) => card.kind !== 'theory');
+    const questionCards = allCards;
     if (questionCards.length === 0) return null;
 
     const sessionId = await sessionService.create({

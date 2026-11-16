@@ -8,6 +8,7 @@ import {
   processPDFContent,
   processLinkContent,
   processTextContent,
+  processMarkdownContent,
   validateContentInput,
 } from '../services/contentIngestion';
 import {
@@ -31,6 +32,8 @@ import { useThemeControl } from '../theme';
 
 function defaultModelFor(provider: AIConfig['provider']): string {
   switch (provider) {
+    case 'nvidia':
+      return 'meta/llama-3.3-70b-instruct';
     case 'openai':
       return 'gpt-4o-mini';
     case 'azure-openai':
@@ -39,8 +42,6 @@ function defaultModelFor(provider: AIConfig['provider']): string {
       return 'claude-3-5-sonnet-latest';
     case 'local':
       return 'llama3.1';
-    case 'omniroute':
-      return 'auto';
     case 'gemini':
     default:
       return 'gemini-3.1-flash-lite';
@@ -49,6 +50,8 @@ function defaultModelFor(provider: AIConfig['provider']): string {
 
 function envKeyFor(provider: AIConfig['provider']): string | undefined {
   switch (provider) {
+    case 'nvidia':
+      return import.meta.env.VITE_NVIDIA_API_KEY;
     case 'openai':
       return import.meta.env.VITE_OPENAI_API_KEY;
     case 'anthropic':
@@ -57,8 +60,6 @@ function envKeyFor(provider: AIConfig['provider']): string | undefined {
       return import.meta.env.VITE_AZURE_OPENAI_API_KEY;
     case 'local':
       return undefined;
-    case 'omniroute':
-      return import.meta.env.VITE_OMNIROUTE_API_KEY;
     case 'gemini':
     default:
       return import.meta.env.VITE_GEMINI_API_KEY;
@@ -138,6 +139,9 @@ export function useContentProcessor() {
           contentId,
           front: fc.front,
           back: fc.back,
+          format: fc.format || 'flip',
+          options: fc.options,
+          explanation: fc.explanation,
           tags: fc.tags,
           kind: 'question' as const,
           easeFactor: 2.5,
@@ -288,10 +292,53 @@ export function useContentProcessor() {
     [updateProgress, processAndSaveFlashcards]
   );
 
+  const processMarkdown = useCallback(
+    async (
+      fileOrText: File | string,
+      title: string,
+      tags: string[]
+    ): Promise<{ content: Content }> => {
+      setProcessing(true);
+      setError(null);
+      updateProgress('Processando notas Markdown do NotebookLM...', 20);
+
+      let contentId: string | null = null;
+      try {
+        const { content } = await processMarkdownContent(fileOrText, title, tags);
+
+        updateProgress('Salvando conteúdo...', 45);
+        contentId = await contentService.create(content);
+
+        if (typeof fileOrText !== 'string' && fileOrText instanceof File) {
+          await contentService.uploadSourceFile(contentId, fileOrText);
+        }
+
+        const savedContent = await contentService.getById(contentId);
+        if (!savedContent) throw new Error('Falha ao salvar conteúdo');
+
+        return await processAndSaveFlashcards(contentId, savedContent, (percent, stage) =>
+          updateProgress(stage ?? 'Gerando flashcards e metodologia 30/70 com IA...', 50 + percent * 0.5)
+        );
+      } catch (err) {
+        if (contentId) {
+          await contentService.delete(contentId).catch(() => undefined);
+        }
+        const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+        setError(msg);
+        throw err;
+      } finally {
+        setProcessing(false);
+        setProgress(null);
+      }
+    },
+    [updateProgress, processAndSaveFlashcards]
+  );
+
   return {
     processing,
     progress,
     error,
+    processMarkdown,
     processPDF,
     processLink,
     processText,

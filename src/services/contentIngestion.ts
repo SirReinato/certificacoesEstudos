@@ -481,6 +481,123 @@ export function chunkByParagraphs(text: string, maxTokens: number = 500): TextCh
 }
 
 // ============================================
+// MARKDOWN / NOTEBOOKLM CHUNKING
+// ============================================
+
+export function chunkMarkdownByHeadings(
+  markdownText: string,
+  contentId: string = ''
+): TextChunk[] {
+  const normalized = normalizeWhitespace(markdownText);
+  if (!normalized) return [];
+
+  // Verificar se o texto contém cabeçalhos markdown (#, ##, ###)
+  const hasHeadings = /^#{1,3}\s+.+$/m.test(normalized);
+  if (!hasHeadings) {
+    const fallback = chunkByParagraphs(normalized, 1200);
+    return fallback.map((c, idx) => ({ ...c, contentId, order: idx }));
+  }
+
+  const lines = normalized.split('\n');
+  const sections: { breadcrumb: string; lines: string[] }[] = [];
+  const hierarchy: { [level: number]: string } = {};
+
+  let currentLines: string[] = [];
+  let currentBreadcrumb = 'Geral';
+
+  const formatBreadcrumb = () => {
+    const parts = [hierarchy[1], hierarchy[2], hierarchy[3]].filter(Boolean);
+    return parts.length > 0 ? parts.join(' > ') : 'Geral';
+  };
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      if (currentLines.length > 0) {
+        sections.push({
+          breadcrumb: currentBreadcrumb,
+          lines: [...currentLines],
+        });
+        currentLines = [];
+      }
+
+      const level = headingMatch[1].length;
+      const title = headingMatch[2].trim();
+      hierarchy[level] = title;
+      // Limpa níveis inferiores
+      for (let l = level + 1; l <= 3; l++) {
+        delete hierarchy[l];
+      }
+
+      currentBreadcrumb = formatBreadcrumb();
+      currentLines.push(line);
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  if (currentLines.length > 0) {
+    sections.push({
+      breadcrumb: currentBreadcrumb,
+      lines: currentLines,
+    });
+  }
+
+  const chunks: TextChunk[] = [];
+  let order = 0;
+  const MAX_CHUNK_TOKENS = 1200; // ~4800 caracteres
+
+  for (const section of sections) {
+    const sectionText = section.lines.join('\n').trim();
+    if (!sectionText) continue;
+
+    const estimatedTokens = Math.ceil(sectionText.length / 4);
+
+    if (estimatedTokens <= MAX_CHUNK_TOKENS) {
+      chunks.push({
+        id: createId(),
+        contentId,
+        text: `[${section.breadcrumb}]\n${sectionText}`,
+        order: order++,
+      });
+    } else {
+      // Subdividir por parágrafos duplos mantendo o breadcrumb
+      const paragraphs = sectionText.split(/\n\n+/).filter(Boolean);
+      let buffer = '';
+
+      for (const p of paragraphs) {
+        if (Math.ceil((buffer.length + p.length + 2) / 4) <= MAX_CHUNK_TOKENS) {
+          buffer += (buffer ? '\n\n' : '') + p;
+        } else {
+          if (buffer) {
+            chunks.push({
+              id: createId(),
+              contentId,
+              text: `[${section.breadcrumb}]\n${buffer}`,
+              order: order++,
+            });
+          }
+          buffer = p;
+        }
+      }
+
+      if (buffer) {
+        chunks.push({
+          id: createId(),
+          contentId,
+          text: `[${section.breadcrumb}]\n${buffer}`,
+          order: order++,
+        });
+      }
+    }
+  }
+
+  return chunks.length > 0
+    ? chunks
+    : [{ id: createId(), contentId, text: normalized, order: 0 }];
+}
+
+// ============================================
 // CONTENT PROCESSOR (Orquestrador)
 // ============================================
 
@@ -563,6 +680,45 @@ export async function processTextContent(
   return { content, chunks: content.chunks ?? [] };
 }
 
+export async function processMarkdownContent(
+  fileOrText: File | string,
+  title: string,
+  tags: string[] = []
+): Promise<ProcessedContent> {
+  let text = '';
+  let fileName: string | undefined;
+  let fileSize: number | undefined;
+
+  if (typeof fileOrText === 'string') {
+    text = fileOrText;
+  } else {
+    fileName = fileOrText.name;
+    fileSize = fileOrText.size;
+    text = await fileOrText.text();
+  }
+
+  const chunks = chunkMarkdownByHeadings(text);
+
+  const content: Omit<Content, 'id' | 'createdAt' | 'updatedAt'> = {
+    title,
+    type: 'markdown',
+    source: {
+      type: 'markdown',
+      fileName,
+      fileSize,
+      originalText: text,
+    },
+    tags,
+    flashcardsCount: 0,
+    reviewedCount: 0,
+    mastery: 0,
+    extractedText: text,
+    chunks,
+  };
+
+  return { content, chunks };
+}
+
 // ============================================
 // VALIDATION
 // ============================================
@@ -578,10 +734,23 @@ export function validateContentInput(
   }
 
   switch (type) {
+    case 'markdown':
+      if (data.file) {
+        if (!data.file.name.endsWith('.md') && data.file.type !== 'text/markdown' && data.file.type !== 'text/plain') {
+          errors.push('Arquivo deve ser uma nota Markdown (.md)');
+        } else if (data.file.size > 20 * 1024 * 1024) {
+          errors.push('Arquivo Markdown deve ter no máximo 20MB');
+        }
+      } else if (!data.text?.trim()) {
+        errors.push('Arquivo Markdown ou texto é obrigatório');
+      } else if (data.text.trim().length < 50) {
+        errors.push('Texto deve ter pelo menos 50 caracteres');
+      }
+      break;
     case 'pdf':
       if (!data.file) {
         errors.push('Arquivo PDF é obrigatório');
-      } else if (data.file.type !== 'application/pdf') {
+      } else if (data.file.type && data.file.type !== 'application/pdf') {
         errors.push('Arquivo deve ser um PDF');
       } else if (data.file.size > 50 * 1024 * 1024) {
         errors.push('Arquivo deve ter no máximo 50MB');

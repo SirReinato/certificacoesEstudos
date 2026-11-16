@@ -4,16 +4,18 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "trap 'kill 0' EXIT; node server/index.mjs & vite",
-    "server": "node server/index.mjs",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "db:migrate-sqlite": "node scripts/migrate-sqlite-to-supabase.mjs",
     "graph:generate": "madge --extensions ts,tsx src/",
     "graph:circular": "madge --circular --extensions ts,tsx src/",
     "graph:deps": "madge --summary --extensions ts,tsx src/"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "@types/pdf-parse": "^1.1.5",
     "cheerio": "^1.2.0",
     "dexie": "^4.4.7",
@@ -27,6 +29,7 @@
     "styled-components": "^6.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
