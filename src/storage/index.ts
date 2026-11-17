@@ -546,8 +546,11 @@ export const settingsService = {
 
     const merged = {
       theme: changes.theme ?? existing?.theme ?? 'system',
-      daily_goal: changes.dailyGoal ?? existing?.dailyGoal ?? 20,
+      daily_goal: changes.dailyGoal ?? existing?.dailyGoal ?? { studyTimeMinutes: 60, newCardsLimit: 20 },
       target_exam: changes.targetExam ?? existing?.targetExam ?? 'AI-200',
+      session_behavior: changes.sessionBehavior ?? existing?.sessionBehavior ?? { autoPlayAudio: false, showAnswerTimer: true },
+      notifications: changes.notifications ?? existing?.notifications ?? { enabled: true, reminderTime: '19:00' },
+      data_retention: changes.data ?? existing?.data ?? { retention: '1year' },
       ai: changes.ai ? { ...(existing?.ai || {}), ...changes.ai } : (existing?.ai || {}),
       updated_at: new Date().toISOString(),
     };
