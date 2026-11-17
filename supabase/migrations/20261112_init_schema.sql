@@ -52,7 +52,8 @@ create table if not exists public.contents (
   updated_at timestamptz not null default now(),
   extracted_text text,
   chunks jsonb not null default '[]'::jsonb,
-  study_guide jsonb not null default '[]'::jsonb
+  study_guide jsonb not null default '[]'::jsonb,
+  storage_path text
 );
 
 alter table public.contents enable row level security;
@@ -71,6 +72,9 @@ create table if not exists public.flashcards (
   kind text not null default 'question' check (kind = 'question'),
   options jsonb, -- lista de MultipleChoiceOption [{ id, text, rationale, isCorrect }]
   explanation text, -- justificativa pedagógica detalhada dos distratores
+  tags text[] not null default '{}',
+  difficulty text default 'medium',
+  importance integer default 5,
   ease_factor real not null default 2.5,
   interval integer not null default 0,
   repetitions integer not null default 0,

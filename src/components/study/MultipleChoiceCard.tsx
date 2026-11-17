@@ -19,7 +19,8 @@ const CardWrapperStl = styled.div`
   border-radius: ${({ theme }) => theme.radii.xl};
   padding: ${({ theme }) => theme.spacing[8]};
   box-shadow: ${({ theme }) => theme.shadows.md};
-  max-width: 800px;
+  width: 100%;
+  max-width: 960px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease-out;
 `;
