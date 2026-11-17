@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { spacing, radii, fontSizes, fontWeights, transitions } from '../../theme/tokens';
 import { buttons } from '../../theme/components';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 // ============================================
 // STYLED COMPONENTS (Sufixo Stl)
@@ -28,7 +29,11 @@ const LoginCardStl = styled.div`
 `;
 
 const LogoAreaStl = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  gap: ${spacing[2]};
   margin-bottom: ${spacing[6]};
 `;
 
@@ -188,6 +193,7 @@ export const Login: React.FC = () => {
     <LoginContainerStl>
       <LoginCardStl>
         <LogoAreaStl>
+          <BrandLogo size={56} />
           <AppTitleStl>SafeZone Studies</AppTitleStl>
           <SubtitleStl>
             {isSignUp

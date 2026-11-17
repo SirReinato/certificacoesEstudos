@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import styled from 'styled-components';
 import { useThemeControl } from '../../theme';
+import { BrandLogo } from '../ui/BrandLogo';
 
 const HeaderWrapper = styled.header`
   position: sticky;
@@ -32,28 +33,6 @@ const Logo = styled.div`
   align-items: center;
   gap: ${({ theme }) => theme.spacing[2]};
   cursor: pointer;
-`;
-
-const LogoIcon = styled.div`
-  width: 32px;
-  height: 32px;
-  border-radius: ${({ theme }) => theme.radii.md};
-  background: ${({ theme }) => theme.gradients.brand.primary};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  font-size: ${({ theme }) => theme.fontSizes.lg};
-`;
-
-const LogoText = styled.span`
-  font-size: ${({ theme }) => theme.fontSizes.xl};
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  background: ${({ theme }) => theme.gradients.brand.primary};
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 `;
 
 const HeaderActions = styled.div`
@@ -214,8 +193,7 @@ export function Header() {
     <HeaderWrapper>
       <HeaderInner>
         <Logo>
-          <LogoIcon>SZ</LogoIcon>
-          <LogoText>SafeZone Studies</LogoText>
+          <BrandLogo size={32} showText />
         </Logo>
 
         <HeaderActions>

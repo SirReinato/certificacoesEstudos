@@ -121,39 +121,58 @@ export default defineConfig({
     linkProxyPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg'],
+      includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png'],
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         // inclui o worker do PDF.js (.mjs) no cache offline
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,ico,woff2}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
       },
       manifest: {
+        id: '/',
         name: 'SafeZone Studies',
         short_name: 'SafeZone',
-        description: 'Portal de Estudos para Certificações Microsoft Azure',
+        description: 'Portal de Estudos para Certificações Microsoft Azure (AI-200 e AI-103)',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
+        orientation: 'portrait-primary',
+        scope: '/',
+        start_url: '/',
+        lang: 'pt-BR',
+        categories: ['education', 'productivity'],
         icons: [
           {
-            src: 'pwa-192x192.svg',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: 'pwa-512x512.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: 'pwa-512x512.svg',
+            src: 'pwa-maskable-512x512.png',
             sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
+            src: 'favicon.svg',
+            sizes: 'any',
             type: 'image/svg+xml',
-            purpose: 'any maskable'
-          }
-        ]
-      }
-    })
+            purpose: 'any',
+          },
+        ],
+      },
+    }),
   ],
   server: {
     host: '0.0.0.0',

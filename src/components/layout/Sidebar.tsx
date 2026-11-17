@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { useThemeControl } from '../../theme';
+import { BrandLogo } from '../ui/BrandLogo';
 
 const SidebarWrapper = styled.aside<{ $collapsed: boolean }>`
   position: fixed;
@@ -61,29 +62,6 @@ const Logo = styled(NavLink)<{ $collapsed: boolean }>`
   &:hover {
     text-decoration: none;
   }
-`;
-
-const LogoIcon = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: ${({ theme }) => theme.radii.md};
-  background: ${({ theme }) => theme.gradients.brand.primary};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  font-size: ${({ theme }) => theme.fontSizes.lg};
-  flex-shrink: 0;
-`;
-
-const LogoText = styled.span`
-  font-size: ${({ theme }) => theme.fontSizes.xl};
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  background: ${({ theme }) => theme.gradients.brand.primary};
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 `;
 
 const ToggleButton = styled.button<{ $collapsed: boolean }>`
@@ -315,8 +293,7 @@ export function Sidebar() {
     <SidebarWrapper $collapsed={collapsed}>
       <SidebarHeader $collapsed={collapsed}>
         <Logo to="/" $collapsed={collapsed}>
-          <LogoIcon>SZ</LogoIcon>
-          <LogoText>SafeZone Studies</LogoText>
+          <BrandLogo size={36} showText />
         </Logo>
         <ToggleButton $collapsed={collapsed} onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expandir menu' : 'Colapsar menu'} title={collapsed ? 'Expandir menu' : 'Colapsar menu'}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
