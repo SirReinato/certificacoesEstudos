@@ -78,7 +78,7 @@ const FlashcardContainer = styled.div`
   flex-direction: column;
   align-items: center;
   gap: ${({ theme }) => theme.spacing[6]};
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
 `;
@@ -348,8 +348,7 @@ const EmptyDesc = styled.p`
 `;
 
 const StudyGuidePanel = styled.section`
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
   padding: ${({ theme }) => theme.spacing[8]};
   background: ${({ theme }) => theme.colors.background.primary};
   border: 1px solid ${({ theme }) => theme.colors.border.primary};
