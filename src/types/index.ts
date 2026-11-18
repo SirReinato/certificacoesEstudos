@@ -147,6 +147,7 @@ export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'azure-openai' | 'l
 export interface AIConfig {
   provider: AIProvider;
   apiKey?: string;
+  providerKeys?: Partial<Record<AIProvider, string>>;
   model: string;
   endpoint?: string;
   temperature?: number;
@@ -174,6 +175,7 @@ export interface UserSettings {
     model?: string;
     endpoint?: string;
     apiKey?: string;
+    providerKeys?: Partial<Record<AIProvider, string>>;
   };
   data: {
     retention: '6months' | '1year' | '2years' | 'forever';

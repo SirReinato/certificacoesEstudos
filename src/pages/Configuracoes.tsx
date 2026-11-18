@@ -351,10 +351,11 @@ export function Configuracoes() {
       setNotificationsEnabled(settings.notifications.enabled);
       setDataRetention(settings.data.retention);
       setReminderTime(settings.notifications.reminderTime);
-      setAiProvider(settings.ai.provider ?? 'gemini');
-      setAiModel(settings.ai.model ?? 'gemini-2.0-flash');
+      const provider = settings.ai.provider ?? 'gemini';
+      setAiProvider(provider);
+      setAiModel(settings.ai.model ?? DEFAULT_AI_MODELS[provider]);
       setAiEndpoint(settings.ai.endpoint ?? '');
-      setAiKey(settings.ai.apiKey ?? '');
+      setAiKey(settings.ai.apiKey ?? settings.ai.providerKeys?.[provider] ?? '');
     }
   }, [settings]);
 
@@ -445,11 +446,18 @@ export function Configuracoes() {
 
   const handleAIProviderChange = useCallback(async (provider: NonNullable<UserSettings['ai']['provider']>) => {
     const model = DEFAULT_AI_MODELS[provider];
+    const nextKey = settings?.ai?.providerKeys?.[provider] ?? '';
+    const prevProvider = aiProvider ?? 'gemini';
+    const updatedKeys = {
+      ...(settings?.ai?.providerKeys ?? {}),
+      ...(aiKey.trim() ? { [prevProvider]: aiKey.trim() } : {}),
+    };
     setAiProvider(provider);
     setAiModel(model);
-    await saveAISettings({ provider, model });
+    setAiKey(nextKey);
+    await saveAISettings({ provider, model, apiKey: nextKey, providerKeys: updatedKeys });
     showToast('Provedor de IA atualizado', 'success');
-  }, [saveAISettings, showToast]);
+  }, [aiKey, aiProvider, saveAISettings, settings, showToast]);
 
   const handleAIModelSave = useCallback(async () => {
     await saveAISettings({ model: aiModel.trim() });
@@ -457,9 +465,15 @@ export function Configuracoes() {
   }, [aiModel, saveAISettings, showToast]);
 
   const handleAIApiKeySave = useCallback(async () => {
-    await saveAISettings({ apiKey: aiKey.trim() });
-    showToast(aiKey.trim() ? 'Chave de IA salva no navegador' : 'Chave de IA removida', 'success');
-  }, [aiKey, saveAISettings, showToast]);
+    const trimmed = aiKey.trim();
+    const currentProvider = aiProvider ?? 'gemini';
+    const updatedKeys = {
+      ...(settings?.ai?.providerKeys ?? {}),
+      [currentProvider]: trimmed,
+    };
+    await saveAISettings({ apiKey: trimmed, providerKeys: updatedKeys });
+    showToast(trimmed ? 'Chave de IA salva no navegador' : 'Chave de IA removida', 'success');
+  }, [aiKey, aiProvider, saveAISettings, settings, showToast]);
 
   const handleAIEndpointSave = useCallback(async () => {
     await saveAISettings({ endpoint: aiEndpoint.trim() });

@@ -71,17 +71,36 @@ async function resolveAIConfig(): Promise<{ config: AIConfig; hasCredentials: bo
   const prefs: UserSettings['ai'] | undefined = settings?.ai;
 
   const provider: AIConfig['provider'] = prefs?.provider ?? 'gemini';
-  const apiKey = prefs?.apiKey?.trim() || envKeyFor(provider)?.trim() || undefined;
+  const savedKeys = prefs?.providerKeys ?? {};
+  const primaryKey = prefs?.apiKey?.trim() || savedKeys[provider]?.trim() || envKeyFor(provider)?.trim() || undefined;
+
+  const providerKeys: AIConfig['providerKeys'] = {
+    gemini: (provider === 'gemini' ? primaryKey : savedKeys.gemini?.trim()) || envKeyFor('gemini')?.trim() || undefined,
+    nvidia: (provider === 'nvidia' ? primaryKey : savedKeys.nvidia?.trim()) || envKeyFor('nvidia')?.trim() || undefined,
+    openai: (provider === 'openai' ? primaryKey : savedKeys.openai?.trim()) || envKeyFor('openai')?.trim() || undefined,
+    anthropic: (provider === 'anthropic' ? primaryKey : savedKeys.anthropic?.trim()) || envKeyFor('anthropic')?.trim() || undefined,
+    'azure-openai': (provider === 'azure-openai' ? primaryKey : savedKeys['azure-openai']?.trim()) || envKeyFor('azure-openai')?.trim() || undefined,
+  };
 
   const config: AIConfig = {
     ...defaultAIConfig,
     provider,
     model: prefs?.model?.trim() || defaultModelFor(provider),
     endpoint: prefs?.endpoint?.trim() || undefined,
-    apiKey,
+    apiKey: primaryKey,
+    providerKeys,
   };
 
-  return { config, hasCredentials: Boolean(apiKey) || provider === 'local' };
+  const hasAnyKey = Boolean(
+    primaryKey ||
+    providerKeys.gemini ||
+    providerKeys.nvidia ||
+    providerKeys.openai ||
+    providerKeys.anthropic ||
+    providerKeys['azure-openai']
+  );
+
+  return { config, hasCredentials: hasAnyKey || provider === 'local' };
 }
 
 function detectExamCode(content: Content): 'AI-200' | 'AI-103' {
