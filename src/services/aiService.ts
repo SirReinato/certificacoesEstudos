@@ -90,10 +90,17 @@ INSTRUÇÃO: Priorize na apostila e nas questões os tópicos de maior peso e os
 Não inclua na apostila assuntos que não estejam na fonte.`;
 }
 
+const MAX_CHUNK_TEXT_CHARS = 6_000;
+
 function buildContentPrompt(chunk: TextChunk, chunkIndex: number, totalChunks: number): string {
+  const safeText =
+    chunk.text.length > MAX_CHUNK_TEXT_CHARS
+      ? `${chunk.text.slice(0, MAX_CHUNK_TEXT_CHARS)}\n[...trecho limitado para caber na janela de requisição]`
+      : chunk.text;
+
   return `CONTEXTO DO CONTEÚDO (parte ${chunkIndex + 1} de ${totalChunks}):
 ---
-${chunk.text}
+${safeText}
 ---
 
 INSTRUÇÕES ESPECÍFICAS:
@@ -114,6 +121,7 @@ INSTRUÇÕES ESPECÍFICAS:
  * requisições (custo alto e minutos de espera).
  */
 const MAX_CHUNKS_PER_CONTENT = 30;
+const CHUNK_PACE_DELAY_MS = 2_500;
 
 export async function generateFlashcardsFromContent(
   content: Content,
@@ -126,19 +134,39 @@ export async function generateFlashcardsFromContent(
     throw new Error('Conteúdo não tem chunks para processar');
   }
 
+  const pool = buildCandidatePool(config);
+  if (pool.length === 0) {
+    throw new Error('Nenhum provedor ou chave de IA configurado.');
+  }
+
+  const poolState: ModelPoolState = {
+    disabled: new Set(),
+    cooldownUntil: new Map(),
+    cursor: 0,
+  };
+
   const allFlashcards: AIGeneratedFlashcards['flashcards'] = [];
   const studyGuide: AIGeneratedFlashcards['studyGuide'] = [];
   const chunks = content.chunks.slice(0, MAX_CHUNKS_PER_CONTENT);
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
+    const basePercent = Math.round((i / chunks.length) * 100);
     const result = await generateFlashcardsFromChunk(
       chunk,
       i,
       chunks.length,
       examCode,
       examSkills,
-      config
+      config,
+      pool,
+      poolState,
+      (candidate) => {
+        onProgress?.(
+          basePercent,
+          `Analisando parte ${i + 1} de ${chunks.length} (${candidate.provider}: ${candidate.model})`
+        );
+      }
     );
     allFlashcards.push(...result.flashcards);
     studyGuide.push(
@@ -149,8 +177,12 @@ export async function generateFlashcardsFromContent(
     );
     onProgress?.(
       Math.round(((i + 1) / chunks.length) * 100),
-      `Analisando parte ${i + 1} de ${chunks.length}`
+      `Parte ${i + 1} de ${chunks.length} concluída`
     );
+
+    if (i < chunks.length - 1) {
+      await sleep(CHUNK_PACE_DELAY_MS);
+    }
   }
 
   const uniqueFlashcards = deduplicateFlashcards(allFlashcards);
@@ -173,7 +205,10 @@ async function generateFlashcardsFromChunk(
   totalChunks: number,
   examCode: 'AI-200' | 'AI-103',
   examSkills: ExamSkill[],
-  config: AIConfig
+  config: AIConfig,
+  pool: ModelCandidate[],
+  poolState: ModelPoolState,
+  onAttempt?: (candidate: ModelCandidate) => void
 ): Promise<AIGeneratedFlashcards> {
   const prompt = `${SYSTEM_PROMPT}
 
@@ -183,15 +218,162 @@ ${buildContentPrompt(chunk, chunkIndex, totalChunks)}
 
 Lembre-se: retorne APENAS o JSON válido, sem markdown ou texto extra.`;
 
-  const response = await callAIProvider(prompt, config);
-  return parseAIResponse(response);
+  return callWithModelRotation(prompt, config, pool, poolState, onAttempt);
 }
 
 // ============================================
 // PROVIDER CALLS
 // ============================================
 
-const AI_TIMEOUT_MS = 45_000;
+const AI_TIMEOUT_MS = 60_000;
+const COOLDOWN_TRANSIENT_MS = 35_000;
+const MAX_COOLDOWN_WAIT_MS = 20_000;
+
+interface ModelCandidate {
+  provider: AIConfig['provider'];
+  model: string;
+  apiKey?: string;
+  endpoint?: string;
+}
+
+interface ModelPoolState {
+  disabled: Set<string>;
+  cooldownUntil: Map<string, number>;
+  cursor: number;
+}
+
+class AIHttpError extends Error {
+  status?: number;
+  retryAfterMs?: number;
+
+  constructor(message: string, status?: number, retryAfterMs?: number) {
+    super(message);
+    this.name = 'AIHttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get('retry-after');
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (!Number.isNaN(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 60_000);
+  }
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) {
+    const diff = dateMs - Date.now();
+    return diff > 0 ? Math.min(diff, 60_000) : undefined;
+  }
+  return undefined;
+}
+
+async function readHttpErrorDetail(response: Response): Promise<string> {
+  let detail = response.statusText;
+  try {
+    const error = await response.json();
+    detail = error?.error?.message || error?.message || detail;
+  } catch {
+    try {
+      detail = (await response.text()).slice(0, 300) || detail;
+    } catch {
+      // mantém statusText
+    }
+  }
+  return detail;
+}
+
+function candidateKey(c: ModelCandidate): string {
+  return `${c.provider}:${c.model}`;
+}
+
+const GEMINI_MODEL_POOL = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
+  'gemini-3.1-pro-preview',
+];
+
+const NVIDIA_MODEL_POOL = [
+  'meta/llama-3.3-70b-instruct',
+  'meta/llama-3.1-70b-instruct',
+  'qwen/qwen2.5-72b-instruct',
+  'mistralai/mistral-large-2-instruct',
+];
+
+function uniqueStrings(items: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const trimmed = item?.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      out.push(trimmed);
+    }
+  }
+  return out;
+}
+
+function buildCandidatePool(config: AIConfig): ModelCandidate[] {
+  const geminiKey =
+    (config.provider === 'gemini' ? config.apiKey : config.providerKeys?.gemini)?.trim() ||
+    import.meta.env.VITE_GEMINI_API_KEY?.trim();
+  const nvidiaKey =
+    (config.provider === 'nvidia' ? config.apiKey : config.providerKeys?.nvidia)?.trim() ||
+    import.meta.env.VITE_NVIDIA_API_KEY?.trim();
+
+  const geminiModels = geminiKey
+    ? uniqueStrings([config.provider === 'gemini' ? config.model : undefined, ...GEMINI_MODEL_POOL]).map(
+        (model): ModelCandidate => ({ provider: 'gemini', model, apiKey: geminiKey })
+      )
+    : [];
+
+  const nvidiaEndpoint =
+    config.provider === 'nvidia' && config.endpoint?.trim()
+      ? config.endpoint.trim()
+      : '/api/nvidia/v1/chat/completions';
+
+  const nvidiaModels = nvidiaKey
+    ? uniqueStrings([config.provider === 'nvidia' ? config.model : undefined, ...NVIDIA_MODEL_POOL]).map(
+        (model): ModelCandidate => ({
+          provider: 'nvidia',
+          model,
+          apiKey: nvidiaKey,
+          endpoint: nvidiaEndpoint,
+        })
+      )
+    : [];
+
+  const interleaved: ModelCandidate[] = [];
+  const primaryFirst = config.provider === 'nvidia' ? [nvidiaModels, geminiModels] : [geminiModels, nvidiaModels];
+  const maxLen = Math.max(primaryFirst[0].length, primaryFirst[1].length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < primaryFirst[0].length) interleaved.push(primaryFirst[0][i]);
+    if (i < primaryFirst[1].length) interleaved.push(primaryFirst[1][i]);
+  }
+
+  if (config.provider === 'gemini' || config.provider === 'nvidia') {
+    return interleaved;
+  }
+
+  const primaryCandidate: ModelCandidate = {
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey || config.providerKeys?.[config.provider],
+    endpoint: config.endpoint,
+  };
+
+  return [primaryCandidate, ...interleaved];
+}
 
 /**
  * `fetch` com timeout. Sem isso uma requisição pendurada deixa o overlay de
@@ -211,22 +393,123 @@ async function fetchWithTimeout(
   }
 }
 
-async function callAIProvider(prompt: string, config: AIConfig): Promise<string> {
-  switch (config.provider) {
+async function callWithModelRotation(
+  prompt: string,
+  config: AIConfig,
+  pool: ModelCandidate[],
+  state: ModelPoolState,
+  onAttempt?: (candidate: ModelCandidate) => void
+): Promise<AIGeneratedFlashcards> {
+  const indexed = pool.map((candidate, index) => ({ candidate, index }));
+  const rotated = [
+    ...indexed.slice(state.cursor % pool.length),
+    ...indexed.slice(0, state.cursor % pool.length),
+  ].filter(({ candidate }) => !state.disabled.has(candidateKey(candidate)));
+
+  if (rotated.length === 0) {
+    throw new Error('Todos os modelos configurados falharam permanentemente (verifique chaves e permissões).');
+  }
+
+  const now = Date.now();
+  const ready = rotated.filter(({ candidate }) => (state.cooldownUntil.get(candidateKey(candidate)) ?? 0) <= now);
+  const cooling = rotated
+    .filter(({ candidate }) => (state.cooldownUntil.get(candidateKey(candidate)) ?? 0) > now)
+    .sort(
+      (a, b) =>
+        (state.cooldownUntil.get(candidateKey(a.candidate)) ?? 0) -
+        (state.cooldownUntil.get(candidateKey(b.candidate)) ?? 0)
+    );
+
+  let lastError: unknown = null;
+
+  const tryCandidate = async (candidate: ModelCandidate, index: number): Promise<AIGeneratedFlashcards | null> => {
+    const key = candidateKey(candidate);
+    onAttempt?.(candidate);
+
+    try {
+      const raw = await callCandidate(prompt, candidate, config);
+      const parsed = parseAIResponse(raw);
+      state.cooldownUntil.delete(key);
+      state.cursor = (index + 1) % pool.length;
+      return parsed;
+    } catch (error) {
+      lastError = error;
+      const status = error instanceof AIHttpError ? error.status : undefined;
+      const retryAfterMs = error instanceof AIHttpError ? error.retryAfterMs : undefined;
+
+      if (status === 401 || status === 403 || status === 404) {
+        console.warn(`Modelo ${key} indisponível (${status}), desativando nesta sessão.`);
+        state.disabled.add(key);
+        return null;
+      }
+
+      if (status === 429 || status === 503 || status === 500 || status === 502 || status === 504 || !status) {
+        const waitMs = retryAfterMs ?? COOLDOWN_TRANSIENT_MS;
+        state.cooldownUntil.set(key, Date.now() + waitMs);
+        console.warn(
+          `Modelo ${key} falhou (${status ?? 'rede/parse'}), alternando para próximo modelo...`
+        );
+        await sleep(1200);
+        return null;
+      }
+
+      console.warn(`Modelo ${key} falhou (${status}), tentando próximo modelo...`);
+      await sleep(800);
+      return null;
+    }
+  };
+
+  for (const { candidate, index } of ready) {
+    const result = await tryCandidate(candidate, index);
+    if (result) return result;
+  }
+
+  if (cooling.length > 0) {
+    const soonest = state.cooldownUntil.get(candidateKey(cooling[0].candidate)) ?? Date.now();
+    const waitMs = Math.min(Math.max(soonest - Date.now(), 2_000), MAX_COOLDOWN_WAIT_MS);
+    console.info(`Todos os modelos em cooldown; aguardando ${Math.round(waitMs / 1000)}s para nova tentativa...`);
+    await sleep(waitMs);
+
+    for (const { candidate, index } of cooling) {
+      const result = await tryCandidate(candidate, index);
+      if (result) return result;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Nenhum modelo de IA disponível respondeu com sucesso.');
+}
+
+async function callCandidate(
+  prompt: string,
+  candidate: ModelCandidate,
+  config: AIConfig
+): Promise<string> {
+  const effectiveConfig: AIConfig = {
+    ...config,
+    provider: candidate.provider,
+    model: candidate.model,
+    apiKey: candidate.apiKey,
+    endpoint: candidate.endpoint ?? config.endpoint,
+    maxTokens: Math.min(config.maxTokens ?? 4096, 4096),
+  };
+
+  switch (candidate.provider) {
     case 'nvidia':
-      return callNvidia(prompt, config);
+      return callNvidia(prompt, effectiveConfig);
     case 'openai':
-      return callOpenAI(prompt, config);
+      return callOpenAI(prompt, effectiveConfig);
     case 'anthropic':
-      return callAnthropic(prompt, config);
+      return callAnthropic(prompt, effectiveConfig);
     case 'azure-openai':
-      return callAzureOpenAI(prompt, config);
+      return callAzureOpenAI(prompt, effectiveConfig);
     case 'gemini':
-      return callGemini(prompt, config);
+      return callGeminiSingle(prompt, effectiveConfig);
     case 'local':
-      return callLocal(prompt, config);
+      return callLocal(prompt, effectiveConfig);
     default:
-      throw new Error(`Provider não suportado: ${config.provider}`);
+      throw new Error(`Provider não suportado: ${candidate.provider}`);
   }
 }
 
@@ -237,35 +520,38 @@ export async function callOpenAICompatible(options: {
   prompt: string;
   temperature?: number;
   maxTokens?: number;
+  useJsonFormat?: boolean;
 }): Promise<string> {
+  const useJsonFormat = options.useJsonFormat ?? true;
+  const payload: Record<string, unknown> = {
+    model: options.model,
+    messages: [{ role: 'user', content: options.prompt }],
+    temperature: options.temperature ?? 0.3,
+    max_tokens: options.maxTokens ?? 4096,
+  };
+  if (useJsonFormat) {
+    payload.response_format = { type: 'json_object' };
+  }
+
   const response = await fetchWithTimeout(options.endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${options.apiKey}`,
     },
-    body: JSON.stringify({
-      model: options.model,
-      messages: [{ role: 'user', content: options.prompt }],
-      temperature: options.temperature ?? 0.3,
-      max_tokens: options.maxTokens ?? 4096,
-      response_format: { type: 'json_object' },
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const error = await response.json();
-      detail = error?.error?.message || error?.message || detail;
-    } catch {
-      try {
-        detail = (await response.text()).slice(0, 300) || detail;
-      } catch {
-        // mantém statusText
-      }
+    if (response.status === 400 && useJsonFormat) {
+      return callOpenAICompatible({ ...options, useJsonFormat: false });
     }
-    throw new Error(`API error (${response.status}): ${detail}`);
+    const detail = await readHttpErrorDetail(response);
+    throw new AIHttpError(
+      `API error (${response.status}): ${detail}`,
+      response.status,
+      parseRetryAfterMs(response)
+    );
   }
 
   const data = await response.json();
@@ -274,7 +560,7 @@ export async function callOpenAICompatible(options: {
 
 async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_NVIDIA_API_KEY;
-  if (!apiKey) throw new Error('NVIDIA NIM API key não configurada');
+  if (!apiKey) throw new AIHttpError('NVIDIA NIM API key não configurada', 401);
 
   // Em dev/preview usa o proxy do Vite para evitar bloqueio de CORS no browser
   const endpoint = config.endpoint
@@ -293,7 +579,7 @@ async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
 
 async function callOpenAI(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OpenAI API key não configurada');
+  if (!apiKey) throw new AIHttpError('OpenAI API key não configurada', 401);
 
   return callOpenAICompatible({
     endpoint: 'https://api.openai.com/v1/chat/completions',
@@ -307,7 +593,7 @@ async function callOpenAI(prompt: string, config: AIConfig): Promise<string> {
 
 async function callAnthropic(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Anthropic API key não configurada');
+  if (!apiKey) throw new AIHttpError('Anthropic API key não configurada', 401);
 
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -325,8 +611,8 @@ async function callAnthropic(prompt: string, config: AIConfig): Promise<string> 
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Anthropic error: ${error.error?.message || response.statusText}`);
+    const detail = await readHttpErrorDetail(response);
+    throw new AIHttpError(`Anthropic error: ${detail}`, response.status, parseRetryAfterMs(response));
   }
 
   const data = await response.json();
@@ -336,7 +622,7 @@ async function callAnthropic(prompt: string, config: AIConfig): Promise<string> 
 async function callAzureOpenAI(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_AZURE_OPENAI_API_KEY;
   const endpoint = config.endpoint || import.meta.env.VITE_AZURE_OPENAI_ENDPOINT;
-  if (!apiKey || !endpoint) throw new Error('Azure OpenAI config incompleta');
+  if (!apiKey || !endpoint) throw new AIHttpError('Azure OpenAI config incompleta', 401);
 
   const url = `${endpoint}/openai/deployments/${config.model}/chat/completions?api-version=2024-02-15-preview`;
 
@@ -355,80 +641,49 @@ async function callAzureOpenAI(prompt: string, config: AIConfig): Promise<string
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Azure OpenAI error: ${error.error?.message || response.statusText}`);
+    const detail = await readHttpErrorDetail(response);
+    throw new AIHttpError(`Azure OpenAI error: ${detail}`, response.status, parseRetryAfterMs(response));
   }
 
   const data = await response.json();
   return data.choices[0]?.message?.content || '';
 }
 
-// Lista de fallback para o provedor Gemini.
-// Modelos testados com a chave real: 3.1-flash-lite e 3.5-flash-lite são os
-// estáveis com responseMimeType JSON. Os demais entram como última tentativa.
-const GEMINI_MODEL_FALLBACKS = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-pro-preview',
-  'gemini-3.5-flash',
-  'gemini-3.7-flash',
-  'gemini-3.8-flash',
-];
-
-async function callGemini(prompt: string, config: AIConfig, modelIndex = 0): Promise<string> {
+async function callGeminiSingle(prompt: string, config: AIConfig): Promise<string> {
   const apiKey = config.apiKey || import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error('Gemini API key não configurada');
+  if (!apiKey) throw new AIHttpError('Gemini API key não configurada', 401);
 
-  // Usa o modelo da config atual, ou percorre a lista de fallbacks
-  const modelToUse = modelIndex === 0 ? config.model : GEMINI_MODEL_FALLBACKS[modelIndex - 1];
-  
-  if (!modelToUse) throw new Error('Nenhum modelo de IA disponível');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${apiKey}`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: config.temperature,
+        maxOutputTokens: config.maxTokens,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
 
-  try {
-    const response = await fetchWithTimeout(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: config.temperature,
-          maxOutputTokens: config.maxTokens,
-          responseMimeType: 'application/json',
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      // Sobrecarga/limite: tenta o próximo modelo da lista de fallback
-      if (
-        [503, 500, 429, 404].includes(response.status) &&
-        modelIndex < GEMINI_MODEL_FALLBACKS.length
-      ) {
-        console.warn(`Modelo ${modelToUse} falhou (${response.status}), tentando próximo modelo...`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return callGemini(prompt, config, modelIndex + 1);
-      }
-      
-      const error = await response.json();
-      throw new Error(`Gemini error: ${error.error?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.candidates[0]?.content?.parts[0]?.text || '';
-  } catch (error) {
-    if (modelIndex < GEMINI_MODEL_FALLBACKS.length) {
-      console.warn(`Erro de rede no modelo ${modelToUse}, tentando fallback...`);
-      return callGemini(prompt, config, modelIndex + 1);
-    }
-    throw error;
+  if (!response.ok) {
+    const detail = await readHttpErrorDetail(response);
+    throw new AIHttpError(
+      `Gemini error (${response.status}): ${detail}`,
+      response.status,
+      parseRetryAfterMs(response)
+    );
   }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function callLocal(prompt: string, config: AIConfig): Promise<string> {
   const endpoint = config.endpoint || 'http://localhost:11434/api/generate';
-  
+
   const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -442,7 +697,8 @@ async function callLocal(prompt: string, config: AIConfig): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Local AI error: ${response.statusText}`);
+    const detail = await readHttpErrorDetail(response);
+    throw new AIHttpError(`Local AI error: ${detail}`, response.status);
   }
 
   const data = await response.json();

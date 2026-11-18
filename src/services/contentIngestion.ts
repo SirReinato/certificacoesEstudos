@@ -561,8 +561,36 @@ export function chunkMarkdownByHeadings(
         order: order++,
       });
     } else {
-      // Subdividir por parágrafos duplos mantendo o breadcrumb
-      const paragraphs = sectionText.split(/\n\n+/).filter(Boolean);
+      // Subdividir por parágrafos duplos mantendo o breadcrumb (e por linha/tamanho se um bloco for gigante)
+      const maxSectionChars = MAX_CHUNK_TOKENS * 4;
+      const rawParagraphs = sectionText.split(/\n\n+/).filter(Boolean);
+      const paragraphs: string[] = [];
+      for (const para of rawParagraphs) {
+        if (para.length <= maxSectionChars) {
+          paragraphs.push(para);
+        } else {
+          const subLines = para.split('\n');
+          let lineBuf = '';
+          for (const line of subLines) {
+            if (line.length > maxSectionChars) {
+              if (lineBuf) {
+                paragraphs.push(lineBuf);
+                lineBuf = '';
+              }
+              for (let pos = 0; pos < line.length; pos += maxSectionChars) {
+                paragraphs.push(line.slice(pos, pos + maxSectionChars));
+              }
+            } else if (lineBuf.length + line.length + 1 <= maxSectionChars) {
+              lineBuf += (lineBuf ? '\n' : '') + line;
+            } else {
+              if (lineBuf) paragraphs.push(lineBuf);
+              lineBuf = line;
+            }
+          }
+          if (lineBuf) paragraphs.push(lineBuf);
+        }
+      }
+
       let buffer = '';
 
       for (const p of paragraphs) {
