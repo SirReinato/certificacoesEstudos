@@ -33,7 +33,7 @@ import { useThemeControl } from '../theme';
 function defaultModelFor(provider: AIConfig['provider']): string {
   switch (provider) {
     case 'nvidia':
-      return 'meta/llama-3.3-70b-instruct';
+      return 'google/gemma-4-31b-it';
     case 'openai':
       return 'gpt-4o-mini';
     case 'azure-openai':

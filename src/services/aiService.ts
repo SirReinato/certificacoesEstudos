@@ -295,8 +295,6 @@ function candidateKey(c: ModelCandidate): string {
 const GEMINI_MODEL_POOL = [
   'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
   'gemini-3.5-flash',
   'gemini-3.7-flash',
   'gemini-3.8-flash',
@@ -304,10 +302,13 @@ const GEMINI_MODEL_POOL = [
 ];
 
 const NVIDIA_MODEL_POOL = [
-  'meta/llama-3.3-70b-instruct',
-  'meta/llama-3.1-70b-instruct',
-  'qwen/qwen2.5-72b-instruct',
-  'mistralai/mistral-large-2-instruct',
+  'google/gemma-4-31b-it',
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
+  'mistralai/mistral-large-4-1t-a52b',
+  'z-ai/glm-5.3-flash',
+  'nvidia/nemotron-3.5-super-vl-120b-a12b',
+  'minimaxai/minimax-m3.1-flash',
+  'google/gemma-3-12b-it',
 ];
 
 function uniqueStrings(items: Array<string | undefined>): string[] {
@@ -437,7 +438,7 @@ async function callWithModelRotation(
       const status = error instanceof AIHttpError ? error.status : undefined;
       const retryAfterMs = error instanceof AIHttpError ? error.retryAfterMs : undefined;
 
-      if (status === 401 || status === 403 || status === 404) {
+      if (status === 401 || status === 403 || status === 404 || status === 410) {
         console.warn(`Modelo ${key} indisponível (${status}), desativando nesta sessão.`);
         state.disabled.add(key);
         return null;
@@ -570,7 +571,7 @@ async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
   return callOpenAICompatible({
     endpoint,
     apiKey,
-    model: config.model || 'meta/llama-3.3-70b-instruct',
+    model: config.model || 'google/gemma-4-31b-it',
     prompt,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
