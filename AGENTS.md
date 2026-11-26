@@ -178,7 +178,7 @@ O comando `npm run dev` gerencia a inicialização paralela da API backend e do 
 
 ## 4. Variáveis de ambiente e configuração
 
-No deploy Cloudflare, `VITE_MANAGED_AI=true` seleciona `POST /api/ai/gemini` e `POST /api/ai/nvidia`. O Worker `server/worker-ai.mjs` valida o token em `/auth/v1/user` no Supabase, limita requisições por usuário e lê `GEMINI_API_KEY` e `NVIDIA_API_KEY` como segredos de runtime. O build usa somente a configuração pública do Supabase e o sinalizador de IA gerenciada.
+No deploy Cloudflare, `VITE_MANAGED_AI=true` seleciona `POST /api/ai/gemini` e `POST /api/ai/nvidia`. O Worker `server/worker-ai.mjs` valida o token em `/auth/v1/user` no Supabase, limita requisições por usuário e lê `GEMINI_API_KEY` e `NVIDIA_API_KEY` como segredos de runtime. A tela Configurações indica IA gerenciada e oculta campos de chave e endpoint quando não se aplicam. O build usa somente a configuração pública do Supabase e o sinalizador de IA gerenciada.
 
 
 * **Ambiente do Servidor Node**:

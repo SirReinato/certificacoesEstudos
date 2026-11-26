@@ -327,6 +327,7 @@ export function Configuracoes() {
 
   // Configuração de IA
   const [aiProvider, setAiProvider] = useState<UserSettings['ai']['provider']>('gemini');
+  const usesWorkerAI = import.meta.env.VITE_MANAGED_AI === 'true' && (aiProvider === 'gemini' || aiProvider === 'nvidia');
   const [aiModel, setAiModel] = useState('gemini-2.0-flash');
   const [aiEndpoint, setAiEndpoint] = useState('');
   const [aiKey, setAiKey] = useState('');
@@ -722,7 +723,7 @@ export function Configuracoes() {
               onChange={(e) => handleAIProviderChange(e.target.value as NonNullable<UserSettings['ai']['provider']>)}
             >
               <option value="gemini">Google Gemini (Padrão)</option>
-              <option value="nvidia">NVIDIA NIM (Llama 3.3 / Mistral)</option>
+              <option value="nvidia">NVIDIA NIM (Nemotron)</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
               <option value="azure-openai">Azure OpenAI</option>
@@ -747,50 +748,56 @@ export function Configuracoes() {
           </SettingControl>
         </SettingRow>
 
-        <SettingRow>
-          <SettingInfo>
-            <SettingLabel>Chave de API</SettingLabel>
-            <SettingDescription>
-              Armazenada com segurança na sua conta no Supabase com isolamento de perfil (RLS).
-            </SettingDescription>
-          </SettingInfo>
-          <SettingControl>
-            <KeyRow>
-              <Input
-                type={showKey ? 'text' : 'password'}
-                value={aiKey}
-                placeholder="Cole sua API key"
-                onChange={(e) => setAiKey(e.target.value)}
-                onBlur={handleAIApiKeySave}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <ShowKeyButton type="button" onClick={() => setShowKey((v) => !v)}>
-                {showKey ? 'Ocultar' : 'Mostrar'}
-              </ShowKeyButton>
-            </KeyRow>
-          </SettingControl>
-        </SettingRow>
+        {!usesWorkerAI && (
+          <SettingRow>
+            <SettingInfo>
+              <SettingLabel>Chave de API</SettingLabel>
+              <SettingDescription>
+                Armazenada com segurança na sua conta no Supabase com isolamento de perfil (RLS).
+              </SettingDescription>
+            </SettingInfo>
+            <SettingControl>
+              <KeyRow>
+                <Input
+                  type={showKey ? 'text' : 'password'}
+                  value={aiKey}
+                  placeholder="Cole sua API key"
+                  onChange={(e) => setAiKey(e.target.value)}
+                  onBlur={handleAIApiKeySave}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <ShowKeyButton type="button" onClick={() => setShowKey((v) => !v)}>
+                  {showKey ? 'Ocultar' : 'Mostrar'}
+                </ShowKeyButton>
+              </KeyRow>
+            </SettingControl>
+          </SettingRow>
+        )}
 
         <SettingRow>
           <SettingInfo>
             <SettingLabel>Situação da IA</SettingLabel>
             <SettingDescription>
-              {aiProvider === 'local'
+              {usesWorkerAI
+                ? 'A geração usa sua sessão do SafeZone.'
+                : aiProvider === 'local'
                 ? 'Modelos locais não exigem chave — informe o endpoint do Ollama.'
                 : 'A chave permite gerar apostila 30/70 e questões práticas para AI-200 / AI-103.'}
             </SettingDescription>
           </SettingInfo>
           <SettingControl>
-            <KeyStatus $configured={Boolean(aiKey.trim()) || aiProvider === 'local'}>
-              {Boolean(aiKey.trim()) || aiProvider === 'local'
+            <KeyStatus $configured={usesWorkerAI || Boolean(aiKey.trim()) || aiProvider === 'local'}>
+              {usesWorkerAI
+                ? '● Gerenciada pelo SafeZone'
+                : Boolean(aiKey.trim()) || aiProvider === 'local'
                 ? '● Configuração pronta'
                 : '○ Chave de API necessária'}
             </KeyStatus>
           </SettingControl>
         </SettingRow>
 
-        {(aiProvider === 'local' || aiProvider === 'azure-openai' || aiProvider === 'nvidia') && (
+        {(aiProvider === 'local' || aiProvider === 'azure-openai' || (aiProvider === 'nvidia' && !usesWorkerAI)) && (
           <SettingRow>
             <SettingInfo>
               <SettingLabel>Endpoint customizado (opcional)</SettingLabel>
