@@ -484,9 +484,9 @@ export const sessionService = {
     const { data, error } = await supabase
       .from('study_sessions')
       .select('*')
-      .gte('start_time', `${date}T00:00:00.000Z`)
-      .lte('start_time', `${date}T23:59:59.999Z`)
-      .order('start_time', { ascending: false });
+      .gte('started_at', `${date}T00:00:00.000Z`)
+      .lte('started_at', `${date}T23:59:59.999Z`)
+      .order('started_at', { ascending: false });
 
     if (error) throw new Error(`Falha ao buscar sessões da data: ${error.message}`);
     return (data || []).map(toSession);
@@ -496,7 +496,7 @@ export const sessionService = {
     const { data, error } = await supabase
       .from('study_sessions')
       .select('*')
-      .order('start_time', { ascending: false })
+      .order('started_at', { ascending: false })
       .limit(limit);
 
     if (error) throw new Error(`Falha ao buscar sessões recentes: ${error.message}`);
@@ -506,13 +506,13 @@ export const sessionService = {
   async getStreak(): Promise<number> {
     const { data } = await supabase
       .from('study_sessions')
-      .select('start_time')
-      .order('start_time', { ascending: false });
+      .select('started_at')
+      .order('started_at', { ascending: false });
 
     if (!data || data.length === 0) return 0;
 
     const uniqueDays = new Set(
-      data.map((s) => new Date(s.start_time).toISOString().split('T')[0])
+      data.map((s) => new Date(s.started_at).toISOString().split('T')[0])
     );
 
     const sortedDays = Array.from(uniqueDays).sort().reverse();

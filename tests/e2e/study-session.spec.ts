@@ -45,7 +45,10 @@ async function mockStudy(page: Page, cards: ReturnType<typeof card>[], guide: ob
         }
         Object.assign(sessions.find(row => 'eq.' + row.id === params.get('id'))!, request.postDataJSON());
       } else {
-        json = sessions;
+        const orderField = params.get('order')?.split('.')[0];
+        json = orderField
+          ? [...sessions].sort((a, b) => String(b[orderField] ?? '').localeCompare(String(a[orderField] ?? '')))
+          : sessions;
       }
     }
     if (pathname.endsWith('/rest/v1/flashcards')) {
@@ -197,11 +200,11 @@ test('encerra sessão parcial, exibe atividade e retoma a questão sem nota', as
     start_time: today, end_time: '2026-11-26T15:02:05.000Z',
     duration_minutes: 2, time_spent_seconds: 125, cards_reviewed: 1, cards_correct: 1, content_ids: ['tema'],
   });
-  sessions.push({ id: 'legacy', started_at: yesterday, completed_at: today, time_spent_seconds: 86, cards_reviewed: 2, content_id: 'tema' });
+  sessions.push({ id: 'legacy', start_time: tomorrow, started_at: yesterday, completed_at: today, time_spent_seconds: 86, cards_reviewed: 2, content_id: 'tema' });
   await page.goto('/atividade');
   await expect(page.getByText('Azure', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('2m 5s')).toBeVisible();
-  await expect(page.getByText('1m 26s')).toBeVisible();
+  await expect(page.getByText(/^(2m 5s|1m 26s)$/)).toHaveText(['2m 5s', '1m 26s']);
   await startTopic(page);
   await expect(page.getByRole('heading', { name: 'Sem nota' })).toBeVisible();
 });
