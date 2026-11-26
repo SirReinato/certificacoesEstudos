@@ -44,3 +44,7 @@ Use **Encerrar por hoje** para salvar uma sessão parcial. O histórico em **Ati
 As novas apostilas são geradas em tópicos curtos. Quando a fonte traz os detalhes necessários, cada tópico pode incluir uma síntese, um cenário Azure e um critério de decisão para a prova. As apostilas anteriores continuam disponíveis.
 
 O sumário da apostila abre seções individuais, e **Continuar questões** fica no início da leitura. Depois da primeira avaliação no tema, você pode acessar as questões diretamente ou selecionar **Ler apostila**.
+
+## IA no deploy Cloudflare
+
+O build usa `VITE_MANAGED_AI=true`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O Worker usa o mesmo projeto Supabase para validar a sessão e guarda `GEMINI_API_KEY` e `NVIDIA_API_KEY` em Secrets. Configure os segredos no ambiente em que a versão será publicada. Rode `node --test tests/worker-ai.test.mjs` para testar o contrato das rotas.

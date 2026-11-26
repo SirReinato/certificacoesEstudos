@@ -13,6 +13,7 @@ import {
 } from '../services/contentIngestion';
 import {
   defaultAIConfig,
+  managedAI,
   generateFlashcardsFromContent,
   type AIConfig,
 } from '../services/aiService';
@@ -100,7 +101,7 @@ async function resolveAIConfig(): Promise<{ config: AIConfig; hasCredentials: bo
     providerKeys['azure-openai']
   );
 
-  return { config, hasCredentials: hasAnyKey || provider === 'local' };
+  return { config, hasCredentials: managedAI || hasAnyKey || provider === 'local' };
 }
 
 function detectExamCode(content: Content): 'AI-200' | 'AI-103' {

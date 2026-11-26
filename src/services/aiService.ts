@@ -12,7 +12,11 @@ import type {
   AIConfig,
 } from '../types';
 
+import { supabase } from './supabaseClient';
+
 export { type AIConfig };
+
+export const managedAI = import.meta.env.VITE_MANAGED_AI === 'true';
 
 export const defaultAIConfig: AIConfig = {
   provider: 'gemini',
@@ -337,7 +341,7 @@ function buildCandidatePool(config: AIConfig): ModelCandidate[] {
     (config.provider === 'nvidia' ? config.apiKey : config.providerKeys?.nvidia)?.trim() ||
     import.meta.env.VITE_NVIDIA_API_KEY?.trim();
 
-  const geminiModels = geminiKey
+  const geminiModels = managedAI || geminiKey
     ? uniqueStrings([config.provider === 'gemini' ? config.model : undefined, ...GEMINI_MODEL_POOL]).map(
         (model): ModelCandidate => ({ provider: 'gemini', model, apiKey: geminiKey })
       )
@@ -348,7 +352,7 @@ function buildCandidatePool(config: AIConfig): ModelCandidate[] {
       ? config.endpoint.trim()
       : '/api/nvidia/v1/chat/completions';
 
-  const nvidiaModels = nvidiaKey
+  const nvidiaModels = managedAI || nvidiaKey
     ? uniqueStrings([config.provider === 'nvidia' ? config.model : undefined, ...NVIDIA_MODEL_POOL]).map(
         (model): ModelCandidate => ({
           provider: 'nvidia',
@@ -565,6 +569,7 @@ export async function callOpenAICompatible(options: {
 }
 
 async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
+  if (managedAI) return callManagedAI('nvidia', prompt, config);
   const apiKey = config.apiKey || import.meta.env.VITE_NVIDIA_API_KEY;
   if (!apiKey) throw new AIHttpError('NVIDIA NIM API key não configurada', 401);
 
@@ -655,7 +660,23 @@ async function callAzureOpenAI(prompt: string, config: AIConfig): Promise<string
   return data.choices[0]?.message?.content || '';
 }
 
+async function callManagedAI(provider: 'gemini' | 'nvidia', prompt: string, config: AIConfig): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new AIHttpError('Entre no SafeZone para usar a IA.', 401);
+  const response = await fetchWithTimeout(`/api/ai/${provider}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ model: config.model, prompt, temperature: config.temperature, maxTokens: config.maxTokens }),
+  });
+  if (!response.ok) {
+    throw new AIHttpError(await readHttpErrorDetail(response), response.status, parseRetryAfterMs(response));
+  }
+  const { text } = await response.json();
+  return text;
+}
+
 async function callGeminiSingle(prompt: string, config: AIConfig): Promise<string> {
+  if (managedAI) return callManagedAI('gemini', prompt, config);
   const apiKey = config.apiKey || import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new AIHttpError('Gemini API key não configurada', 401);
 
