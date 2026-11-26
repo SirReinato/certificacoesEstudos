@@ -11,6 +11,12 @@
     "SUPABASE_URL": "https://xbpshvsprrruntwvadcy.supabase.co",
     "SUPABASE_ANON_KEY": "sb_publishable_7qAGmLP50Nm8e0O9xXfGgA_Wg3BqbZT"
   },
+  "previews": {
+    "vars": {
+      "SUPABASE_URL": "https://xbpshvsprrruntwvadcy.supabase.co",
+      "SUPABASE_ANON_KEY": "sb_publishable_7qAGmLP50Nm8e0O9xXfGgA_Wg3BqbZT"
+    }
+  },
   "ratelimits": [
     { "name": "AI_RATE_LIMIT", "namespace_id": "26112601", "simple": { "limit": 20, "period": 60 } }
   ]

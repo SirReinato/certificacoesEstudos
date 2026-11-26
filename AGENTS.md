@@ -483,4 +483,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-26 | Agente IA | SIR-174: sumário navegável, atalho de prática, retorno por histórico e leitura compatível com apostilas antigas e novas. |
 | 2026-11-26 | Agente IA | SIR-172: ordenação do histórico e consultas por data usam o início original das sessões legadas. |
 | 2026-11-26 | Agente IA | Adiciona rotas de IA gerenciada na Cloudflare com sessão Supabase, segredos de runtime e limite por usuário. Define Nemotron 3.5 Lightning como padrão NVIDIA após validação do endpoint. |
-| 2026-11-26 | Agente IA | Restringe a IA gerenciada a contas Supabase com e-mail confirmado na lista privada do Worker. |
+| 2026-11-26 | Agente IA | Restringe a IA gerenciada a contas Supabase com e-mail confirmado na lista privada do Worker. Corrige a configuração de builds de preview e mantém as credenciais fora dos previews automáticos. |
