@@ -8,7 +8,7 @@ import styled from 'styled-components';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../theme';
 import { useStudySession } from '../hooks/useStudySession';
-import { contentService } from '../storage';
+import { contentService, flashcardService } from '../storage';
 import { ExamTrapCallout } from '../components/study/ExamTrapCallout';
 import { DecisionMatrix } from '../components/study/DecisionMatrix';
 import { MultipleChoiceCard } from '../components/study/MultipleChoiceCard';
@@ -363,7 +363,24 @@ const StudyGuideIntro = styled.p`
   margin-bottom: ${({ theme }) => theme.spacing[6]};
 `;
 
+const TopicNavigationStl = styled.nav`
+  margin-block: ${({ theme }) => theme.spacing[6]};
+  padding: ${({ theme }) => theme.spacing[4]};
+  border: 1px solid ${({ theme }) => theme.colors.border.primary};
+  border-radius: ${({ theme }) => theme.radii.md};
+
+  ol {
+    padding-inline-start: ${({ theme }) => theme.spacing[5]};
+    margin-block: ${({ theme }) => theme.spacing[2]} 0;
+  }
+
+  li + li {
+    margin-top: ${({ theme }) => theme.spacing[2]};
+  }
+`;
+
 const StudySection = styled.section`
+  & > h3 { scroll-margin-top: 6rem; }
   & + & {
     margin-top: ${({ theme }) => theme.spacing[6]};
   }
@@ -378,6 +395,11 @@ const StudySectionText = styled.p`
   color: ${({ theme }) => theme.colors.text.secondary};
   line-height: ${({ theme }) => theme.lineHeights.relaxed};
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  & + & {
+    margin-top: ${({ theme }) => theme.spacing[3]};
+  }
 `;
 
 const StudyActions = styled.div`
@@ -386,6 +408,11 @@ const StudyActions = styled.div`
   flex-wrap: wrap;
   gap: ${({ theme }) => theme.spacing[3]};
   margin-top: ${({ theme }) => theme.spacing[8]};
+`;
+
+const GuideActionsStl = styled(StudyActions)`
+  justify-content: flex-start;
+  margin: 0 0 ${({ theme }) => theme.spacing[6]};
 `;
 
 const PrimaryButton = styled.button`
@@ -464,6 +491,8 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [contentTitle, setContentTitle] = useState<string | null>(null);
   const [studyGuide, setStudyGuide] = useState<StudyGuideSection[]>([]);
+  const [contentLoaded, setContentLoaded] = useState(!contentId);
+  const [showGuide, setShowGuide] = useState(false);
   const [hasStoredPdf, setHasStoredPdf] = useState(false);
   const [noCards, setNoCards] = useState(false);
   const [nextReview, setNextReview] = useState<string | null>(null);
@@ -475,24 +504,19 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   const [endError, setEndError] = useState(false);
   const finishing = useRef(false);
 
-  // Carrega o título do conteúdo quando vindo da biblioteca (?content=<id>)
   useEffect(() => {
-    if (!contentId) {
-      setContentTitle(null);
-      setStudyGuide([]);
-      setHasStoredPdf(false);
-      return;
-    }
-    setContentTitle(null);
-    setStudyGuide([]);
-    setHasStoredPdf(false);
+    if (!contentId) return;
     let active = true;
-    contentService.getById(contentId).then((c) => {
-      if (active) {
-        setContentTitle(c?.title ?? null);
-        setStudyGuide(c?.studyGuide ?? []);
-        setHasStoredPdf(c?.source.type === 'pdf' && c.source.pdfStored === true);
-      }
+    void Promise.all([
+      contentService.getById(contentId).catch(() => undefined),
+      flashcardService.hasReviewed(contentId).catch(() => false),
+    ]).then(([content, hasReviewed]) => {
+      if (!active) return;
+      setContentTitle(content?.title ?? null);
+      setStudyGuide(content?.studyGuide ?? []);
+      setHasStoredPdf(content?.source.type === 'pdf' && content.source.pdfStored === true);
+      setShowGuide(!hasReviewed);
+      setContentLoaded(true);
     });
     return () => {
       active = false;
@@ -530,6 +554,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       const result = await startSession(40, contentId, practice);
       setNoCards(result.status === 'empty');
       setNextReview(result.status === 'scheduled' ? result.nextReview : null);
+      if (result.status === 'scheduled' || result.status === 'started') setShowGuide(false);
       if (result.status === 'started') {
         setAnswerError(false);
         setEndError(false);
@@ -614,7 +639,14 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   }, [isSessionActive, isFinished, currentCard, flipped, flipCard, gradeCard, isGrading, ending]);
 
   if (!isSessionActive && !finalized) {
-    if (nextReview) {
+    if (!contentLoaded) return <p role="status">Carregando tema...</p>;
+
+    const openGuide = () => {
+      setNoCards(false);
+      setShowGuide(true);
+    };
+
+    if (nextReview && !showGuide) {
       return (
         <div>
           <PageHeader><Title>{headerTitle}</Title></PageHeader>
@@ -629,6 +661,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
             {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
             <StudyActions>
               <PrimaryButton disabled={starting} onClick={() => void handleStart(true)}>Praticar agora</PrimaryButton>
+              {studyGuide.length > 0 && <PrimaryButton onClick={openGuide}>Ler apostila (30%)</PrimaryButton>}
               <Link to="/biblioteca">Voltar à biblioteca</Link>
             </StudyActions>
           </EmptyState>
@@ -648,13 +681,14 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
             <EmptyDesc>
               Este conteúdo ainda não tem cards disponíveis para estudar. Verifique se os flashcards foram gerados ou estude outro conteúdo.
             </EmptyDesc>
+            {studyGuide.length > 0 && <PrimaryButton onClick={openGuide}>Ler apostila (30%)</PrimaryButton>}
             <AddButtonStyled to="/biblioteca" style={{ textDecoration: 'none' }}>📚 Voltar à Biblioteca</AddButtonStyled>
           </EmptyState>
         </div>
       );
     }
 
-    if (contentId && studyGuide.length > 0) {
+    if (contentId && showGuide && studyGuide.length > 0) {
       return (
         <div>
           <PageHeader>
@@ -665,6 +699,12 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
             <StudyGuideIntro>
               Reserve cerca de 30% do tempo da sessão para esta leitura; use os 70% restantes para praticar. A proporção é uma meta de estudo, sem cronômetro obrigatório. Somente as questões aparecem como flashcards.
             </StudyGuideIntro>
+            {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
+            <GuideActionsStl>
+              <PrimaryButton disabled={starting} onClick={() => void handleStart()}>
+                Continuar questões (70%)
+              </PrimaryButton>
+            </GuideActionsStl>
             {hasStoredPdf && (
               <p>
                 <a href={`/api/contents/${encodeURIComponent(contentId)}/source`} target="_blank" rel="noreferrer">
@@ -672,19 +712,30 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
                 </a>
               </p>
             )}
+            {studyGuide.length > 1 && (
+              <TopicNavigationStl aria-label="Tópicos da apostila">
+                <strong>Tópicos</strong>
+                <ol>
+                  {studyGuide.map((section, index) => (
+                    <li key={index}><a href={`#topico-${index + 1}`}>{section.title}</a></li>
+                  ))}
+                </ol>
+              </TopicNavigationStl>
+            )}
             {studyGuide.map((section, index) => (
-              <StudySection key={`${section.title}-${index}`}>
-                <StudySectionTitle>{section.title}</StudySectionTitle>
-                <StudySectionText>{section.content}</StudySectionText>
+              <StudySection key={index}>
+                <StudySectionTitle id={`topico-${index + 1}`} tabIndex={-1}>{section.title}</StudySectionTitle>
+                {section.executiveSummary && <StudySectionText><strong>{section.executiveSummary}</strong></StudySectionText>}
+                {section.content.split(/\r?\n[ \t]*\r?\n/).filter(text => text.trim()).map((text, paragraph) => (
+                  <StudySectionText key={paragraph}>{text.trim()}</StudySectionText>
+                ))}
+                {section.azureScenario && <StudySectionText><strong>Cenário no Azure. </strong>{section.azureScenario}</StudySectionText>}
+                {section.decisionCriteria && <StudySectionText><strong>Critério de decisão. </strong>{section.decisionCriteria}</StudySectionText>}
                 <ExamTrapCallout traps={section.gotchas || []} />
                 <DecisionMatrix table={section.comparisonTable} />
               </StudySection>
             ))}
-            {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
             <StudyActions>
-              <PrimaryButton disabled={starting} onClick={() => void handleStart()}>
-                Começar questões (70%) →
-              </PrimaryButton>
               <Link to="/biblioteca" style={{ alignSelf: 'center', color: theme.colors.text.secondary }}>
                 Voltar à biblioteca
               </Link>
@@ -711,8 +762,9 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
           {noCards && <p role="status">Não há questões disponíveis para a revisão diária.</p>}
           <div style={{ display: 'flex', gap: theme.spacing[3], flexWrap: 'wrap', justifyContent: 'center' }}>
             <PrimaryButton disabled={starting} onClick={() => void handleStart()}>
-              Iniciar revisão das questões
+              {studyGuide.length > 0 ? 'Continuar questões (70%)' : 'Iniciar revisão das questões'}
             </PrimaryButton>
+            {studyGuide.length > 0 && <PrimaryButton onClick={openGuide}>Ler apostila (30%)</PrimaryButton>}
             {contentId && (
               <Link to="/biblioteca" style={{ alignSelf: 'center', fontSize: theme.fontSizes.sm, color: theme.colors.text.secondary }}>
                 ← Voltar à biblioteca
@@ -723,7 +775,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
             <HintRow>
               <span aria-hidden="true">📖</span>
               <span>
-                <strong>Estudo por módulo:</strong> abra um conteúdo da biblioteca para ler a apostila (~30%) antes das questões (~70%).
+                <strong>Estudo por módulo:</strong> abra um tema da biblioteca para ler a apostila (~30%) ou continuar nas questões (~70%).
               </span>
             </HintRow>
             <HintRow>

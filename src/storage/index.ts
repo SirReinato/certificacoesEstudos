@@ -270,6 +270,8 @@ export const contentService = {
 // FLASHCARD SERVICE
 // ============================================
 
+const reviewedFlashcardFilter = 'last_reviewed.not.is.null,repetitions.gt.0,lapses.gt.0';
+
 export const flashcardService = {
   async getAll(): Promise<Flashcard[]> {
     const { data, error } = await supabase
@@ -296,7 +298,7 @@ export const flashcardService = {
     let query = supabase
       .from('flashcards')
       .select('*')
-      .or('last_reviewed.not.is.null,repetitions.gt.0,lapses.gt.0')
+      .or(reviewedFlashcardFilter)
       .lte('next_review', now)
       .order('next_review', { ascending: true })
       .order('id', { ascending: true });
@@ -327,6 +329,18 @@ export const flashcardService = {
     const { data, error } = await query;
     if (error) throw new Error(`Falha ao buscar novos flashcards: ${error.message}`);
     return (data || []).map(toFlashcard);
+  },
+
+  async hasReviewed(contentId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('id')
+      .eq('content_id', contentId)
+      .or(reviewedFlashcardFilter)
+      .limit(1);
+
+    if (error) throw new Error(`Falha ao buscar o progresso do tema: ${error.message}`);
+    return Boolean(data?.length);
   },
 
   async getUpcoming(contentId: string, now: string, limit: number): Promise<Flashcard[]> {

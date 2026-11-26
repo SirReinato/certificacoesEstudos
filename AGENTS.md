@@ -358,7 +358,7 @@ O backend SQLite armazena as seguintes entidades centrais:
      a) Uma **Apostila Estruturada (`studyGuide`)** com um conceito por tópico e parágrafos curtos. Os campos opcionais `executiveSummary`, `azureScenario` e `decisionCriteria` só são gerados com respaldo na fonte. Apostilas anteriores continuam válidas.
      b) Flashcards **exclusivamente no formato de questões** (até 50 questões práticas deduplicadas). Cartões teóricos são descartados em favor da apostila.
 3. **Sessão de Estudo Guiada**:
-   - Conteúdos que possuem apostila abrem primeiro a etapa de leitura teórica.
+   - Na primeira visita, conteúdos com apostila abrem na leitura com sumário por tópico, parágrafos e um atalho para as questões. Ao voltar a um tema com avaliações gravadas, a tela oferece as questões primeiro e permite reabrir a apostila.
    - Em seguida, o usuário pratica as questões nos flashcards. A proporção orientadora do sistema é de aproximadamente **30% de tempo de leitura para 70% de prática de questões** (meta orientadora, sem cronômetro punitivo).
    - A fila automática da revisão diária e por tema traz até 40 questões. Revisões vencidas vêm em ordem de vencimento, seguidas por inéditas em ordem de importância, criação e ID. Histórico, repetições ou lapsos identificam questões já avaliadas.
    - Um tema em dia informa a próxima revisão e oferece o treino extra **Praticar agora**, que preserva o agendamento dos cartões e fica fora do histórico de sessões.
@@ -477,3 +477,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-26 | Agente IA | SIR-171: erros reapresentados uma vez na sessão, notas com intervalo calculado pelo SM-2 e proteção contra avaliações simultâneas. |
 | 2026-11-26 | Agente IA | SIR-172: encerramento parcial e automático com resumo, nova tentativa em falha e histórico Supabase com duração em segundos e tema. |
 | 2026-11-26 | Agente IA | SIR-173: geração de leitura curta com síntese, cenário Azure e critério de decisão opcionais, validada com fixtures para AI-200 e AI-103. |
+| 2026-11-26 | Agente IA | SIR-174: sumário navegável, atalho de prática, retorno por histórico e leitura compatível com apostilas antigas e novas. |

@@ -42,3 +42,5 @@ Uma questão marcada como **Errei** ou **Novamente** volta uma vez no fim da ses
 Use **Encerrar por hoje** para salvar uma sessão parcial. O histórico em **Atividade** mostra o tema, a duração e as contagens. Uma pergunta aberta sem avaliação continua disponível na próxima sessão.
 
 As novas apostilas são geradas em tópicos curtos. Quando a fonte traz os detalhes necessários, cada tópico pode incluir uma síntese, um cenário Azure e um critério de decisão para a prova. As apostilas anteriores continuam disponíveis.
+
+O sumário da apostila abre seções individuais, e **Continuar questões** fica no início da leitura. Depois da primeira avaliação no tema, você pode acessar as questões diretamente ou selecionar **Ler apostila**.

@@ -215,3 +215,41 @@ test('salva a avaliação mesmo se a atualização inicial do histórico falhar 
   expect(updates).toHaveLength(1);
   expect(sessions[0]).toMatchObject({ end_time: today, cards_reviewed: 1, cards_correct: 1, accuracy: 1 });
 });
+
+test('apostila permite navegar por teclado e iniciar questões no topo em tela móvel', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockStudy(page, [card('1', 'Questão prática')], [
+    { title: 'Identidades', content: 'Primeiro parágrafo.\n\nSegundo parágrafo.', executiveSummary: 'Resumo de identidade.', azureScenario: 'Cenário com identidade gerenciada.', decisionCriteria: 'Use quando o serviço oferecer suporte.' },
+    { title: 'Permissões', content: 'Texto legado.', gotchas: ['Pegadinha de prova.'], comparisonTable: { headers: ['Critério', 'Opção'], rows: [['Acesso', 'RBAC']] } },
+  ]);
+  await page.goto('/estudo?content=tema');
+  const continueButton = page.getByRole('button', { name: /continuar questões/i });
+  await expect(continueButton).toBeInViewport();
+  await expect(page.getByText('Resumo de identidade.')).toBeVisible();
+  await expect(page.getByText('Cenário com identidade gerenciada.')).toBeVisible();
+  await expect(page.getByText('Use quando o serviço oferecer suporte.')).toBeVisible();
+  const topicLink = page.getByRole('navigation', { name: /tópicos da apostila/i }).getByRole('link', { name: 'Permissões' });
+  await topicLink.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#topico-2$/);
+  await expect(page.getByRole('heading', { name: 'Permissões' })).toBeInViewport();
+  await expect(page.getByText('Texto legado.')).toBeVisible();
+  await expect(page.getByText('Pegadinha de prova.')).toBeVisible();
+  await expect(page.getByRole('table')).toBeVisible();
+  await continueButton.click();
+  await expect(page.getByRole('heading', { name: 'Questão prática' })).toBeVisible();
+});
+
+test('retomada oferece questões primeiro e permite reabrir a apostila com o tema em dia', async ({ page }) => {
+  await mockStudy(page, [card('1', 'Questão futura', { last_reviewed: today, next_review: tomorrow, repetitions: 1 })], [
+    { title: 'Identidades', content: 'Leitura que pode ser reaberta.' },
+  ]);
+  await page.goto('/estudo?content=tema');
+  await expect(page.getByText('Leitura que pode ser reaberta.')).toHaveCount(0);
+  await page.getByRole('button', { name: /continuar questões/i }).click();
+  await expect(page.getByRole('heading', { name: /revisões em dia/i })).toBeVisible();
+  await page.getByRole('button', { name: /ler apostila/i }).click();
+  await expect(page.getByText('Leitura que pode ser reaberta.')).toBeVisible();
+  await page.getByRole('button', { name: /continuar questões/i }).click();
+  await expect(page.getByRole('heading', { name: /revisões em dia/i })).toBeVisible();
+});
