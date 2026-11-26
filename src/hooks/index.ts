@@ -13,6 +13,7 @@ import {
 } from '../services/contentIngestion';
 import {
   defaultAIConfig,
+  managedAI,
   generateFlashcardsFromContent,
   type AIConfig,
 } from '../services/aiService';
@@ -33,7 +34,7 @@ import { useThemeControl } from '../theme';
 function defaultModelFor(provider: AIConfig['provider']): string {
   switch (provider) {
     case 'nvidia':
-      return 'google/gemma-4-31b-it';
+      return 'nvidia/nemotron-3.5-lightning-30b-a3b';
     case 'openai':
       return 'gpt-4o-mini';
     case 'azure-openai':
@@ -100,7 +101,7 @@ async function resolveAIConfig(): Promise<{ config: AIConfig; hasCredentials: bo
     providerKeys['azure-openai']
   );
 
-  return { config, hasCredentials: hasAnyKey || provider === 'local' };
+  return { config, hasCredentials: managedAI || hasAnyKey || provider === 'local' };
 }
 
 function detectExamCode(content: Content): 'AI-200' | 'AI-103' {

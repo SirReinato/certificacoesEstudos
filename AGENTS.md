@@ -178,6 +178,9 @@ O comando `npm run dev` gerencia a inicialização paralela da API backend e do 
 
 ## 4. Variáveis de ambiente e configuração
 
+No deploy Cloudflare, `VITE_MANAGED_AI=true` seleciona `POST /api/ai/gemini` e `POST /api/ai/nvidia`. O Worker `server/worker-ai.mjs` valida o token em `/auth/v1/user` no Supabase, exige e-mail confirmado na lista `AI_ALLOWED_EMAILS`, limita requisições por usuário e lê `GEMINI_API_KEY` e `NVIDIA_API_KEY` como segredos de runtime. A tela Configurações indica IA gerenciada e oculta campos de chave e endpoint quando não se aplicam. O build usa somente a configuração pública do Supabase e o sinalizador de IA gerenciada.
+
+
 * **Ambiente do Servidor Node**:
   - `PORT`: Porta de execução da API (padrão: `3001`).
   - `DB_PATH`: Caminho do arquivo SQLite (padrão: `data/safezone.db`). Se alterado, a pasta de uploads de PDF será alocada adjacente a esse caminho.
@@ -479,3 +482,5 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-26 | Agente IA | SIR-173: geração de leitura curta com síntese, cenário Azure e critério de decisão opcionais, validada com fixtures para AI-200 e AI-103. |
 | 2026-11-26 | Agente IA | SIR-174: sumário navegável, atalho de prática, retorno por histórico e leitura compatível com apostilas antigas e novas. |
 | 2026-11-26 | Agente IA | SIR-172: ordenação do histórico e consultas por data usam o início original das sessões legadas. |
+| 2026-11-26 | Agente IA | Adiciona rotas de IA gerenciada na Cloudflare com sessão Supabase, segredos de runtime e limite por usuário. Define Nemotron 3.5 Lightning como padrão NVIDIA após validação do endpoint. |
+| 2026-11-26 | Agente IA | Restringe a IA gerenciada a contas Supabase com e-mail confirmado na lista privada do Worker. Corrige a configuração de builds de preview e mantém as credenciais fora dos previews automáticos. |

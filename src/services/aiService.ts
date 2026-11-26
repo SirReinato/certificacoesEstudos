@@ -12,7 +12,11 @@ import type {
   AIConfig,
 } from '../types';
 
+import { supabase } from './supabaseClient';
+
 export { type AIConfig };
+
+export const managedAI = import.meta.env.VITE_MANAGED_AI === 'true';
 
 export const defaultAIConfig: AIConfig = {
   provider: 'gemini',
@@ -259,6 +263,8 @@ class AIHttpError extends Error {
   }
 }
 
+class ManagedAIAccessDeniedError extends Error {}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -307,7 +313,7 @@ const GEMINI_MODEL_POOL = [
 ];
 
 const NVIDIA_MODEL_POOL = [
-  'google/gemma-4-31b-it',
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
   'nvidia/nemotron-3.5-lightning-30b-a3b',
   'mistralai/mistral-large-4-1t-a52b',
   'z-ai/glm-5.3-flash',
@@ -337,7 +343,7 @@ function buildCandidatePool(config: AIConfig): ModelCandidate[] {
     (config.provider === 'nvidia' ? config.apiKey : config.providerKeys?.nvidia)?.trim() ||
     import.meta.env.VITE_NVIDIA_API_KEY?.trim();
 
-  const geminiModels = geminiKey
+  const geminiModels = managedAI || geminiKey
     ? uniqueStrings([config.provider === 'gemini' ? config.model : undefined, ...GEMINI_MODEL_POOL]).map(
         (model): ModelCandidate => ({ provider: 'gemini', model, apiKey: geminiKey })
       )
@@ -348,7 +354,7 @@ function buildCandidatePool(config: AIConfig): ModelCandidate[] {
       ? config.endpoint.trim()
       : '/api/nvidia/v1/chat/completions';
 
-  const nvidiaModels = nvidiaKey
+  const nvidiaModels = managedAI || nvidiaKey
     ? uniqueStrings([config.provider === 'nvidia' ? config.model : undefined, ...NVIDIA_MODEL_POOL]).map(
         (model): ModelCandidate => ({
           provider: 'nvidia',
@@ -439,6 +445,7 @@ async function callWithModelRotation(
       state.cursor = (index + 1) % pool.length;
       return parsed;
     } catch (error) {
+      if (error instanceof ManagedAIAccessDeniedError) throw error;
       lastError = error;
       const status = error instanceof AIHttpError ? error.status : undefined;
       const retryAfterMs = error instanceof AIHttpError ? error.retryAfterMs : undefined;
@@ -565,6 +572,7 @@ export async function callOpenAICompatible(options: {
 }
 
 async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
+  if (managedAI) return callManagedAI('nvidia', prompt, config);
   const apiKey = config.apiKey || import.meta.env.VITE_NVIDIA_API_KEY;
   if (!apiKey) throw new AIHttpError('NVIDIA NIM API key não configurada', 401);
 
@@ -576,7 +584,7 @@ async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
   return callOpenAICompatible({
     endpoint,
     apiKey,
-    model: config.model || 'google/gemma-4-31b-it',
+    model: config.model || 'nvidia/nemotron-3.5-lightning-30b-a3b',
     prompt,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
@@ -655,7 +663,26 @@ async function callAzureOpenAI(prompt: string, config: AIConfig): Promise<string
   return data.choices[0]?.message?.content || '';
 }
 
+async function callManagedAI(provider: 'gemini' | 'nvidia', prompt: string, config: AIConfig): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new AIHttpError('Entre no SafeZone para usar a IA.', 401);
+  const response = await fetchWithTimeout(`/api/ai/${provider}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ model: config.model, prompt, temperature: config.temperature, maxTokens: config.maxTokens }),
+  });
+  if (!response.ok) {
+    if (response.status === 403 && response.headers.get('X-SafeZone-AI-Access') === 'denied') {
+      throw new ManagedAIAccessDeniedError('Esta conta não está autorizada a usar a IA gerenciada.');
+    }
+    throw new AIHttpError(await readHttpErrorDetail(response), response.status, parseRetryAfterMs(response));
+  }
+  const { text } = await response.json();
+  return text;
+}
+
 async function callGeminiSingle(prompt: string, config: AIConfig): Promise<string> {
+  if (managedAI) return callManagedAI('gemini', prompt, config);
   const apiKey = config.apiKey || import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new AIHttpError('Gemini API key não configurada', 401);
 

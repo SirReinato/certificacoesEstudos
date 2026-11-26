@@ -1,0 +1,23 @@
+{
+  "name": "safezone-studies",
+  "main": "server/worker-ai.mjs",
+  "compatibility_date": "2026-11-26",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/ai/*"]
+  },
+  "vars": {
+    "SUPABASE_URL": "https://xbpshvsprrruntwvadcy.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_7qAGmLP50Nm8e0O9xXfGgA_Wg3BqbZT"
+  },
+  "previews": {
+    "vars": {
+      "SUPABASE_URL": "https://xbpshvsprrruntwvadcy.supabase.co",
+      "SUPABASE_ANON_KEY": "sb_publishable_7qAGmLP50Nm8e0O9xXfGgA_Wg3BqbZT"
+    }
+  },
+  "ratelimits": [
+    { "name": "AI_RATE_LIMIT", "namespace_id": "26112601", "simple": { "limit": 20, "period": 60 } }
+  ]
+}
