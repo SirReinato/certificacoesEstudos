@@ -34,7 +34,7 @@ export default {
     try {
       const auth = await fetch(new URL('/auth/v1/user', env.SUPABASE_URL).href, {
         headers: { Authorization, apikey: env.SUPABASE_ANON_KEY },
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(8000),
       });
       if (auth.status === 401 || auth.status === 403) return responseError(401, 'Sessão inválida ou expirada.');
@@ -67,7 +67,7 @@ export default {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...providerHeaders },
         body: JSON.stringify(body),
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(55_000),
       });
       if (!result.ok) {

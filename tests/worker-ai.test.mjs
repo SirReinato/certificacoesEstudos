@@ -15,6 +15,7 @@ test('recusa requisição sem sessão antes de chamar um provedor', async () => 
 
 test('valida o JWT no Supabase e usa a chave Gemini apenas no servidor', async (t) => {
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(options.redirect, 'manual');
     if (String(url).endsWith('/auth/v1/user')) {
       assert.equal(options.headers.Authorization, 'Bearer header.payload.signature');
       return Response.json({ id: 'study-user' });
