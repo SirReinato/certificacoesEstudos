@@ -31,7 +31,9 @@ Use estritamente as informações do conteúdo fornecido; não invente fatos nem
 
 Diretrizes da metodologia 30/70:
 1. ETAPA DE CONTEÚDO (30% do estudo): Gere uma apostila estruturada em seções.
-   - Em cada seção, forneça explicação teórica densa, clara e didática.
+   - Trabalhe um conceito por seção, com um título específico e uma explicação de um ou dois parágrafos curtos em "content".
+   - Quando a fonte trouxer evidências, inclua "executiveSummary" com uma frase sobre o ponto principal, "azureScenario" com uma situação breve de aplicação e "decisionCriteria" com a condição que muda a escolha na prova.
+   - Omita qualquer campo opcional sem apoio no trecho. Não invente serviços, SKUs, limites ou requisitos.
    - Identifique e extraia armadilhas de exame da Microsoft (gotchas) e pegadinhas de prova frequentes no array "gotchas".
    - Quando houver comparação entre 2 ou mais tecnologias ou SKUs (ex: Custom Vision vs Computer Vision, LUIS vs Conversational Language Understanding, etc.), gere uma tabela comparativa com "headers" e "rows" em "comparisonTable".
 
@@ -40,12 +42,15 @@ Diretrizes da metodologia 30/70:
    - Pelo menos metade das questões geradas devem ser do formato "multiple-choice" (múltipla escolha com 4 opções A, B, C, D), com distratores plausíveis e justificativa detalhada para cada alternativa.
    - As demais podem ser "flip" (pergunta direta e resposta explicada).
 
-ESTRUTURA JSON EXATA OBRIGATÓRIA:
+ESTRUTURA JSON OBRIGATÓRIA (em cada seção, "title" e "content" são obrigatórios; os demais campos são opcionais):
 {
   "studyGuide": [
     {
       "title": "Título da Seção",
-      "content": "Explicação teórica aprofundada.",
+      "content": "Explicação em parágrafos curtos.",
+      "executiveSummary": "Ponto principal em uma frase.",
+      "azureScenario": "Situação breve no Azure sustentada pela fonte.",
+      "decisionCriteria": "Condição para escolher uma opção na prova.",
       "gotchas": [
         "Atenção: O serviço X exige formato Y, diferente do serviço Z."
       ],
@@ -105,7 +110,7 @@ ${safeText}
 
 INSTRUÇÕES ESPECÍFICAS:
 - Este é um pedaço de um conteúdo maior. Use apenas o que está neste trecho.
-- Escreva a apostila como explicação contínua, com contexto, exemplos e relações entre conceitos. Não transforme a apostila em perguntas e respostas ou cartões.
+- Preserve o contexto e as relações entre conceitos em parágrafos curtos. Separe parágrafos com duas quebras de linha no valor JSON de "content".
 - Gere questões que exijam aplicação do conhecimento; perguntas devem terminar em "?" e as respostas devem explicar o raciocínio.
 - Inclua tags relevantes (ex: "azure-functions", "app-service", "cosmos-db", "security").
 - Atribua importance 8-10 para conceitos core do exame, 5-7 para detalhes, 1-4 para contexto.`;
@@ -710,6 +715,10 @@ async function callLocal(prompt: string, config: AIConfig): Promise<string> {
 // PARSING & UTILS (30/70 Engine)
 // ============================================
 
+function optionalSectionText(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() || undefined : undefined;
+}
+
 function parseAIResponse(response: string): AIGeneratedFlashcards {
   try {
     // 1. Limpeza básica
@@ -775,6 +784,9 @@ function parseAIResponse(response: string): AIGeneratedFlashcards {
         .map((section: Record<string, unknown>) => {
           const title = String(section.title || '').trim();
           const content = String(section.content || '').trim();
+          const executiveSummary = optionalSectionText(section.executiveSummary);
+          const azureScenario = optionalSectionText(section.azureScenario);
+          const decisionCriteria = optionalSectionText(section.decisionCriteria);
           const gotchas = Array.isArray(section.gotchas)
             ? section.gotchas.map((g: unknown) => String(g).trim()).filter(Boolean)
             : undefined;
@@ -796,6 +808,9 @@ function parseAIResponse(response: string): AIGeneratedFlashcards {
           return {
             title,
             content,
+            ...(executiveSummary && { executiveSummary }),
+            ...(azureScenario && { azureScenario }),
+            ...(decisionCriteria && { decisionCriteria }),
             gotchas: gotchas && gotchas.length > 0 ? gotchas : undefined,
             comparisonTable,
           };

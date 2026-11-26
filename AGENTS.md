@@ -355,7 +355,7 @@ O backend SQLite armazena as seguintes entidades centrais:
    - `aiService` divide o material em até 30 chunks sequenciais por chamada para respeitar limites de contexto (com teto de ~1200 tokens por chunk na ingestão de Markdown e 6000 caracteres por requisição).
    - **Rotação e Fallback Multi-Provedor**: Quando chaves de Gemini e NVIDIA NIM estão configuradas (via Configurações ou `.env`), `aiService` alterna entre os modelos disponíveis em round-robin por chunk, aplica pausa entre requisições (`2,5s`) para permanecer dentro dos limites de RPM/TPM, coloca modelos com erro 429/503/timeout em cooldown temporário, desativa modelos 401/403/404 na sessão e faz fallback automático inclusive entre Google Gemini e NVIDIA NIM.
    - O modelo gera:
-     a) Uma **Apostila Estruturada (`studyGuide`)** com seções teóricas divididas por tópico.
+     a) Uma **Apostila Estruturada (`studyGuide`)** com um conceito por tópico e parágrafos curtos. Os campos opcionais `executiveSummary`, `azureScenario` e `decisionCriteria` só são gerados com respaldo na fonte. Apostilas anteriores continuam válidas.
      b) Flashcards **exclusivamente no formato de questões** (até 50 questões práticas deduplicadas). Cartões teóricos são descartados em favor da apostila.
 3. **Sessão de Estudo Guiada**:
    - Conteúdos que possuem apostila abrem primeiro a etapa de leitura teórica.
@@ -476,3 +476,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-26 | Agente IA | SIR-170: fila SM-2 por vencimento e histórico, treino extra sem reagendamento, testes Playwright com relógio controlado e servidor isolado. |
 | 2026-11-26 | Agente IA | SIR-171: erros reapresentados uma vez na sessão, notas com intervalo calculado pelo SM-2 e proteção contra avaliações simultâneas. |
 | 2026-11-26 | Agente IA | SIR-172: encerramento parcial e automático com resumo, nova tentativa em falha e histórico Supabase com duração em segundos e tema. |
+| 2026-11-26 | Agente IA | SIR-173: geração de leitura curta com síntese, cenário Azure e critério de decisão opcionais, validada com fixtures para AI-200 e AI-103. |

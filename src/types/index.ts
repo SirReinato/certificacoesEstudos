@@ -31,6 +31,8 @@ export interface StudyGuideSection {
   title: string;
   content: string;
   executiveSummary?: string;
+  azureScenario?: string;
+  decisionCriteria?: string;
   gotchas?: string[];
   comparisonTable?: {
     title?: string;
