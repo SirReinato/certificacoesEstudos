@@ -360,7 +360,8 @@ O backend SQLite armazena as seguintes entidades centrais:
 3. **Sessão de Estudo Guiada**:
    - Conteúdos que possuem apostila abrem primeiro a etapa de leitura teórica.
    - Em seguida, o usuário pratica as questões nos flashcards. A proporção orientadora do sistema é de aproximadamente **30% de tempo de leitura para 70% de prática de questões** (meta orientadora, sem cronômetro punitivo).
-   - Revisões diárias sem módulo focado mostram apenas questões; o hook de estudo exclui cartões antigos marcados como teoria.
+   - A fila automática da revisão diária e por tema traz até 40 questões. Revisões vencidas vêm em ordem de vencimento, seguidas por inéditas em ordem de importância, criação e ID. Histórico, repetições ou lapsos identificam questões já avaliadas.
+   - Um tema em dia informa a próxima revisão e oferece o treino extra **Praticar agora**, que preserva o agendamento dos cartões e fica fora do histórico de sessões.
 4. **Algoritmo de Repetição Espaçada (SM-2)**:
    - Na revisão de flashcards, o usuário avalia o cartão entre quatro notas:
      - `again` (nota 0/1): Errou ou esqueceu completamente (repete na mesma sessão).
@@ -471,3 +472,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-17 | Agente IA | Criação da identidade visual oficial SafeZone Studies (`public/favicon.svg`, `favicon-32x32.png`, `apple-touch-icon.png`, `pwa-192x192.png`, `pwa-512x512.png`, `pwa-maskable-512x512.png`), componente `src/components/ui/BrandLogo.tsx` (integrado em `Sidebar`, `Header` e `Login`) e ajuste completo do manifesto PWA/Workbox em `vite.config.ts` e `index.html`. |
 | 2026-11-18 | Agente IA | Implementação de rotação de modelos, fallback cruzado entre Google Gemini e NVIDIA NIM (`providerKeys` em `src/types/index.ts`, `src/hooks/index.ts` e `src/pages/Configuracoes.tsx`), cooldown/pacing entre chunks em `src/services/aiService.ts` para respeitar limites de requisição em arquivos `.md` grandes e subdivisão de blocos gigantes em `chunkMarkdownByHeadings` (`src/services/contentIngestion.ts`). |
 | 2026-11-18 | Agente IA | Atualização da lista ativa de modelos NVIDIA NIM (`google/gemma-4-31b-it`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `mistralai/mistral-large-4-1t-a52b`, `z-ai/glm-5.3-flash`, etc.), remoção dos modelos Gemini/NVIDIA descontinuados (404/410) e desativação automática de modelos HTTP 410 na sessão. |
+| 2026-11-26 | Agente IA | SIR-170: fila SM-2 por vencimento e histórico, treino extra sem reagendamento, testes Playwright com relógio controlado e servidor isolado. |

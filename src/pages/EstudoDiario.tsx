@@ -438,9 +438,13 @@ const ratings = [
 ] as const;
 
 export function EstudoDiario() {
-  const theme = useTheme();
   const [searchParams] = useSearchParams();
   const contentId = searchParams.get('content') || undefined;
+  return <StudySessionPage key={contentId ?? 'daily'} contentId={contentId} />;
+}
+
+function StudySessionPage({ contentId }: { contentId?: string }) {
+  const theme = useTheme();
 
   const { 
     session, 
@@ -458,7 +462,10 @@ export function EstudoDiario() {
   const [contentTitle, setContentTitle] = useState<string | null>(null);
   const [studyGuide, setStudyGuide] = useState<StudyGuideSection[]>([]);
   const [hasStoredPdf, setHasStoredPdf] = useState(false);
-  const [noCardsForContent, setNoCardsForContent] = useState(false);
+  const [noCards, setNoCards] = useState(false);
+  const [nextReview, setNextReview] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(false);
 
   // Carrega o título do conteúdo quando vindo da biblioteca (?content=<id>)
   useEffect(() => {
@@ -491,13 +498,22 @@ export function EstudoDiario() {
     }
   }, [isFinished, isSessionActive, endSession]);
 
-  const handleStart = async () => {
-    setNoCardsForContent(false);
-    const sessionId = await startSession(40, contentId);
-    if (sessionId) {
-      setIsSessionActive(true);
-    } else {
-      setNoCardsForContent(true);
+  const handleStart = async (practice = false) => {
+    if (starting) return;
+    setStarting(true);
+    setStartError(false);
+    try {
+      const result = await startSession(40, contentId, practice);
+      setNoCards(result.status === 'empty');
+      setNextReview(result.status === 'scheduled' ? result.nextReview : null);
+      if (result.status === 'started') {
+        setFlipped(false);
+        setIsSessionActive(true);
+      }
+    } catch {
+      setStartError(true);
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -557,7 +573,29 @@ export function EstudoDiario() {
   }, [isSessionActive, isFinished, currentCard, flipped, flipCard, handleAnswer, setIsAnswerVisible]);
 
   if (!isSessionActive) {
-    if (contentId && noCardsForContent) {
+    if (nextReview) {
+      return (
+        <div>
+          <PageHeader><Title>{headerTitle}</Title></PageHeader>
+          <EmptyState>
+            <EmptyTitle>Revisões em dia</EmptyTitle>
+            <EmptyDesc>
+              Próxima revisão: <time dateTime={nextReview}>{new Date(nextReview).toLocaleString('pt-BR', {
+                dateStyle: 'short',
+                timeStyle: 'short',
+              })}</time>.
+            </EmptyDesc>
+            {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
+            <StudyActions>
+              <PrimaryButton disabled={starting} onClick={() => void handleStart(true)}>Praticar agora</PrimaryButton>
+              <Link to="/biblioteca">Voltar à biblioteca</Link>
+            </StudyActions>
+          </EmptyState>
+        </div>
+      );
+    }
+
+    if (contentId && noCards) {
       return (
         <div>
           <PageHeader>
@@ -601,8 +639,9 @@ export function EstudoDiario() {
                 <DecisionMatrix table={section.comparisonTable} />
               </StudySection>
             ))}
+            {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
             <StudyActions>
-              <PrimaryButton onClick={handleStart}>
+              <PrimaryButton disabled={starting} onClick={() => void handleStart()}>
                 Começar questões (70%) →
               </PrimaryButton>
               <Link to="/biblioteca" style={{ alignSelf: 'center', color: theme.colors.text.secondary }}>
@@ -627,8 +666,10 @@ export function EstudoDiario() {
               ? 'Sessão focada neste conteúdo: o sistema selecionará os cards vencidos e novos dele.'
               : 'Vamos revisar seus flashcards usando repetição espaçada. O sistema selecionará automaticamente os cards que você precisa revisar agora.'}
           </EmptyDesc>
+          {startError && <p role="alert">Não foi possível carregar suas questões. Tente novamente.</p>}
+          {noCards && <p role="status">Não há questões disponíveis para a revisão diária.</p>}
           <div style={{ display: 'flex', gap: theme.spacing[3], flexWrap: 'wrap', justifyContent: 'center' }}>
-            <PrimaryButton onClick={handleStart}>
+            <PrimaryButton disabled={starting} onClick={() => void handleStart()}>
               Iniciar revisão das questões
             </PrimaryButton>
             {contentId && (
@@ -732,7 +773,7 @@ export function EstudoDiario() {
 
       <FlashcardContainer>
         <PhaseIndicator>
-          ✍️ Etapa 2 de 2 — Questões (70%) · recuperação ativa
+          {session.practice ? 'Treino extra · agendamento preservado' : '✍️ Etapa 2 de 2 — Questões (70%) · recuperação ativa'}
         </PhaseIndicator>
 
         {currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2 ? (

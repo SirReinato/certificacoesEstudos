@@ -279,12 +279,16 @@ export const flashcardService = {
     return (data || []).map(toFlashcard);
   },
 
-  async getDue(limit?: number): Promise<Flashcard[]> {
+  async getDue(limit?: number, contentId?: string, now = new Date().toISOString()): Promise<Flashcard[]> {
     let query = supabase
       .from('flashcards')
       .select('*')
-      .lte('next_review', new Date().toISOString())
-      .order('next_review', { ascending: true });
+      .or('last_reviewed.not.is.null,repetitions.gt.0,lapses.gt.0')
+      .lte('next_review', now)
+      .order('next_review', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (contentId) query = query.eq('content_id', contentId);
 
     if (limit) query = query.limit(limit);
 
@@ -297,14 +301,32 @@ export const flashcardService = {
     let query = supabase
       .from('flashcards')
       .select('*')
+      .is('last_reviewed', null)
       .eq('repetitions', 0)
-      .order('importance', { ascending: false });
+      .eq('lapses', 0)
+      .order('importance', { ascending: false })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (contentId) query = query.eq('content_id', contentId);
     if (limit) query = query.limit(limit);
 
     const { data, error } = await query;
     if (error) throw new Error(`Falha ao buscar novos flashcards: ${error.message}`);
+    return (data || []).map(toFlashcard);
+  },
+
+  async getUpcoming(contentId: string, now: string, limit: number): Promise<Flashcard[]> {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('*')
+      .eq('content_id', contentId)
+      .gt('next_review', now)
+      .order('next_review', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(limit);
+
+    if (error) throw new Error(`Falha ao buscar próximas revisões: ${error.message}`);
     return (data || []).map(toFlashcard);
   },
 
