@@ -47,4 +47,4 @@ O sumário da apostila abre seções individuais, e **Continuar questões** fica
 
 ## IA no deploy Cloudflare
 
-O build usa `VITE_MANAGED_AI=true`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O Worker usa o mesmo projeto Supabase para validar a sessão e guarda `GEMINI_API_KEY` e `NVIDIA_API_KEY` em Secrets. Configure os segredos no ambiente em que a versão será publicada. Rode `node --test tests/worker-ai.test.mjs` para testar o contrato das rotas.
+O build usa `VITE_MANAGED_AI=true`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O Worker usa o mesmo projeto Supabase para validar a sessão e guarda `GEMINI_API_KEY` e `NVIDIA_API_KEY` em Secrets. Configure os segredos no ambiente em que a versão será publicada. Cadastre `AI_ALLOWED_EMAILS` como segredo com os e-mails autorizados separados por vírgula. O Worker só autoriza e-mails confirmados pelo Supabase e bloqueia toda geração gerenciada se a lista estiver vazia. Rode `node --test tests/worker-ai.test.mjs` para testar o contrato das rotas.

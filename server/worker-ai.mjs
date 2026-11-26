@@ -39,8 +39,12 @@ export default {
       });
       if (auth.status === 401 || auth.status === 403) return responseError(401, 'Sessão inválida ou expirada.');
       if (!auth.ok) return responseError(503, 'Não foi possível validar a sessão.');
-      const { id } = await auth.json();
+      const { id, email, email_confirmed_at: emailConfirmedAt } = await auth.json();
       if (!id) return responseError(401, 'Sessão inválida ou expirada.');
+      const allowedEmails = (env.AI_ALLOWED_EMAILS ?? '').split(',').map((address) => address.trim().toLowerCase()).filter(Boolean);
+      if (!emailConfirmedAt || typeof email !== 'string' || !allowedEmails.includes(email.trim().toLowerCase())) {
+        return responseError(403, 'Esta conta não está autorizada a usar a IA gerenciada.', { 'X-SafeZone-AI-Access': 'denied' });
+      }
       const { success } = await env.AI_RATE_LIMIT.limit({ key: id });
       if (!success) return responseError(429, 'Limite temporário de geração atingido.', { 'Retry-After': '60' });
 

@@ -263,6 +263,8 @@ class AIHttpError extends Error {
   }
 }
 
+class ManagedAIAccessDeniedError extends Error {}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -443,6 +445,7 @@ async function callWithModelRotation(
       state.cursor = (index + 1) % pool.length;
       return parsed;
     } catch (error) {
+      if (error instanceof ManagedAIAccessDeniedError) throw error;
       lastError = error;
       const status = error instanceof AIHttpError ? error.status : undefined;
       const retryAfterMs = error instanceof AIHttpError ? error.retryAfterMs : undefined;
@@ -669,6 +672,9 @@ async function callManagedAI(provider: 'gemini' | 'nvidia', prompt: string, conf
     body: JSON.stringify({ model: config.model, prompt, temperature: config.temperature, maxTokens: config.maxTokens }),
   });
   if (!response.ok) {
+    if (response.status === 403 && response.headers.get('X-SafeZone-AI-Access') === 'denied') {
+      throw new ManagedAIAccessDeniedError('Esta conta não está autorizada a usar a IA gerenciada.');
+    }
     throw new AIHttpError(await readHttpErrorDetail(response), response.status, parseRetryAfterMs(response));
   }
   const { text } = await response.json();
