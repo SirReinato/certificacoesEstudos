@@ -355,15 +355,17 @@ O backend SQLite armazena as seguintes entidades centrais:
    - `aiService` divide o material em até 30 chunks sequenciais por chamada para respeitar limites de contexto (com teto de ~1200 tokens por chunk na ingestão de Markdown e 6000 caracteres por requisição).
    - **Rotação e Fallback Multi-Provedor**: Quando chaves de Gemini e NVIDIA NIM estão configuradas (via Configurações ou `.env`), `aiService` alterna entre os modelos disponíveis em round-robin por chunk, aplica pausa entre requisições (`2,5s`) para permanecer dentro dos limites de RPM/TPM, coloca modelos com erro 429/503/timeout em cooldown temporário, desativa modelos 401/403/404 na sessão e faz fallback automático inclusive entre Google Gemini e NVIDIA NIM.
    - O modelo gera:
-     a) Uma **Apostila Estruturada (`studyGuide`)** com seções teóricas divididas por tópico.
+     a) Uma **Apostila Estruturada (`studyGuide`)** com um conceito por tópico e parágrafos curtos. Os campos opcionais `executiveSummary`, `azureScenario` e `decisionCriteria` só são gerados com respaldo na fonte. Apostilas anteriores continuam válidas.
      b) Flashcards **exclusivamente no formato de questões** (até 50 questões práticas deduplicadas). Cartões teóricos são descartados em favor da apostila.
 3. **Sessão de Estudo Guiada**:
-   - Conteúdos que possuem apostila abrem primeiro a etapa de leitura teórica.
+   - Na primeira visita, conteúdos com apostila abrem na leitura com sumário por tópico, parágrafos e um atalho para as questões. Ao voltar a um tema com avaliações gravadas, a tela oferece as questões primeiro e permite reabrir a apostila.
    - Em seguida, o usuário pratica as questões nos flashcards. A proporção orientadora do sistema é de aproximadamente **30% de tempo de leitura para 70% de prática de questões** (meta orientadora, sem cronômetro punitivo).
-   - Revisões diárias sem módulo focado mostram apenas questões; o hook de estudo exclui cartões antigos marcados como teoria.
+   - A fila automática da revisão diária e por tema traz até 40 questões. Revisões vencidas vêm em ordem de vencimento, seguidas por inéditas em ordem de importância, criação e ID. Histórico, repetições ou lapsos identificam questões já avaliadas.
+   - Um tema em dia informa a próxima revisão e oferece o treino extra **Praticar agora**, que preserva o agendamento dos cartões e fica fora do histórico de sessões.
+   - **Encerrar por hoje** salva o início e o fim, o tempo em segundos, o tema da sessão focada e as contagens acumuladas no Supabase. A conclusão automática usa o mesmo fluxo. A tela Atividade aceita os campos legados de sessão. As consultas de data, ordem e sequência usam `started_at` para preservar a data original das sessões migradas.
 4. **Algoritmo de Repetição Espaçada (SM-2)**:
    - Na revisão de flashcards, o usuário avalia o cartão entre quatro notas:
-     - `again` (nota 0/1): Errou ou esqueceu completamente (repete na mesma sessão).
+     - `again` (nota 0/1): Errou ou esqueceu completamente. O cartão volta uma vez no fim da fila da sessão, inclusive quando é o único.
      - `hard` (nota 2/3): Lembrou com grande dificuldade (intervalo curto).
      - `good` (nota 4): Lembrou no tempo adequado (padrão de avanço).
      - `easy` (nota 5): Dominou o conceito (avanço mais longo).
@@ -471,3 +473,9 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-17 | Agente IA | Criação da identidade visual oficial SafeZone Studies (`public/favicon.svg`, `favicon-32x32.png`, `apple-touch-icon.png`, `pwa-192x192.png`, `pwa-512x512.png`, `pwa-maskable-512x512.png`), componente `src/components/ui/BrandLogo.tsx` (integrado em `Sidebar`, `Header` e `Login`) e ajuste completo do manifesto PWA/Workbox em `vite.config.ts` e `index.html`. |
 | 2026-11-18 | Agente IA | Implementação de rotação de modelos, fallback cruzado entre Google Gemini e NVIDIA NIM (`providerKeys` em `src/types/index.ts`, `src/hooks/index.ts` e `src/pages/Configuracoes.tsx`), cooldown/pacing entre chunks em `src/services/aiService.ts` para respeitar limites de requisição em arquivos `.md` grandes e subdivisão de blocos gigantes em `chunkMarkdownByHeadings` (`src/services/contentIngestion.ts`). |
 | 2026-11-18 | Agente IA | Atualização da lista ativa de modelos NVIDIA NIM (`google/gemma-4-31b-it`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `mistralai/mistral-large-4-1t-a52b`, `z-ai/glm-5.3-flash`, etc.), remoção dos modelos Gemini/NVIDIA descontinuados (404/410) e desativação automática de modelos HTTP 410 na sessão. |
+| 2026-11-26 | Agente IA | SIR-170: fila SM-2 por vencimento e histórico, treino extra sem reagendamento, testes Playwright com relógio controlado e servidor isolado. |
+| 2026-11-26 | Agente IA | SIR-171: erros reapresentados uma vez na sessão, notas com intervalo calculado pelo SM-2 e proteção contra avaliações simultâneas. |
+| 2026-11-26 | Agente IA | SIR-172: encerramento parcial e automático com resumo, nova tentativa em falha e histórico Supabase com duração em segundos e tema. |
+| 2026-11-26 | Agente IA | SIR-173: geração de leitura curta com síntese, cenário Azure e critério de decisão opcionais, validada com fixtures para AI-200 e AI-103. |
+| 2026-11-26 | Agente IA | SIR-174: sumário navegável, atalho de prática, retorno por histórico e leitura compatível com apostilas antigas e novas. |
+| 2026-11-26 | Agente IA | SIR-172: ordenação do histórico e consultas por data usam o início original das sessões legadas. |

@@ -96,15 +96,20 @@ function fromFlashcard(fc: Partial<Flashcard>, userId: string): Record<string, u
 }
 
 function toSession(row: Record<string, unknown>): StudySession {
-  const startTime = String(row.start_time || new Date().toISOString());
+  const startTime = String(row.started_at || row.start_time || new Date().toISOString());
+  const endTime = row.end_time || row.completed_at;
+  const timeSpent = Number(row.time_spent_seconds || 0) || Number(row.duration_minutes ?? 0) * 60;
+  const contentId = row.content_id ? String(row.content_id) : undefined;
+  const contentIds = Array.isArray(row.content_ids) ? (row.content_ids as string[]) : [];
   return {
     id: String(row.id),
     date: startTime.split('T')[0],
     startedAt: startTime,
     startTime,
-    endTime: row.end_time ? String(row.end_time) : undefined,
-    timeSpent: Number(row.duration_minutes ?? 0) * 60,
-    durationMinutes: Number(row.duration_minutes ?? 0),
+    endTime: endTime ? String(endTime) : undefined,
+    completedAt: endTime ? String(endTime) : undefined,
+    timeSpent,
+    durationMinutes: Math.floor(timeSpent / 60),
     cardsReviewed: Number(row.cards_reviewed ?? 0),
     cardsCorrect: Number(row.cards_correct ?? 0),
     cardsAgain: Number(row.cards_again ?? 0),
@@ -112,7 +117,8 @@ function toSession(row: Record<string, unknown>): StudySession {
     cardsGood: Number(row.cards_good ?? 0),
     cardsEasy: Number(row.cards_easy ?? 0),
     accuracy: Number(row.accuracy ?? 0),
-    contentIds: Array.isArray(row.content_ids) ? (row.content_ids as string[]) : [],
+    contentId,
+    contentIds: contentIds.length ? contentIds : contentId ? [contentId] : [],
   };
 }
 
@@ -149,6 +155,13 @@ export const contentService = {
 
     if (error) throw new Error(`Falha ao buscar conteúdos: ${error.message}`);
     return (data || []).map(toContent);
+  },
+
+  async getTitles(ids: string[]): Promise<Record<string, string>> {
+    if (ids.length === 0) return {};
+    const { data, error } = await supabase.from('contents').select('id,title').in('id', ids);
+    if (error) throw new Error(`Falha ao buscar títulos dos conteúdos: ${error.message}`);
+    return Object.fromEntries((data ?? []).map(row => [row.id, row.title]));
   },
 
   async getById(id: string): Promise<Content | undefined> {
@@ -257,6 +270,8 @@ export const contentService = {
 // FLASHCARD SERVICE
 // ============================================
 
+const reviewedFlashcardFilter = 'last_reviewed.not.is.null,repetitions.gt.0,lapses.gt.0';
+
 export const flashcardService = {
   async getAll(): Promise<Flashcard[]> {
     const { data, error } = await supabase
@@ -279,12 +294,16 @@ export const flashcardService = {
     return (data || []).map(toFlashcard);
   },
 
-  async getDue(limit?: number): Promise<Flashcard[]> {
+  async getDue(limit?: number, contentId?: string, now = new Date().toISOString()): Promise<Flashcard[]> {
     let query = supabase
       .from('flashcards')
       .select('*')
-      .lte('next_review', new Date().toISOString())
-      .order('next_review', { ascending: true });
+      .or(reviewedFlashcardFilter)
+      .lte('next_review', now)
+      .order('next_review', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (contentId) query = query.eq('content_id', contentId);
 
     if (limit) query = query.limit(limit);
 
@@ -297,14 +316,44 @@ export const flashcardService = {
     let query = supabase
       .from('flashcards')
       .select('*')
+      .is('last_reviewed', null)
       .eq('repetitions', 0)
-      .order('importance', { ascending: false });
+      .eq('lapses', 0)
+      .order('importance', { ascending: false })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (contentId) query = query.eq('content_id', contentId);
     if (limit) query = query.limit(limit);
 
     const { data, error } = await query;
     if (error) throw new Error(`Falha ao buscar novos flashcards: ${error.message}`);
+    return (data || []).map(toFlashcard);
+  },
+
+  async hasReviewed(contentId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('id')
+      .eq('content_id', contentId)
+      .or(reviewedFlashcardFilter)
+      .limit(1);
+
+    if (error) throw new Error(`Falha ao buscar o progresso do tema: ${error.message}`);
+    return Boolean(data?.length);
+  },
+
+  async getUpcoming(contentId: string, now: string, limit: number): Promise<Flashcard[]> {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('*')
+      .eq('content_id', contentId)
+      .gt('next_review', now)
+      .order('next_review', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(limit);
+
+    if (error) throw new Error(`Falha ao buscar próximas revisões: ${error.message}`);
     return (data || []).map(toFlashcard);
   },
 
@@ -377,9 +426,13 @@ export const sessionService = {
     const userId = await requireUserId();
     const row = {
       user_id: userId,
-      start_time: session.startTime,
-      end_time: session.endTime,
-      duration_minutes: session.durationMinutes,
+      start_time: session.startTime ?? session.startedAt,
+      started_at: session.startTime ?? session.startedAt,
+      content_id: session.contentId,
+      end_time: session.endTime ?? session.completedAt,
+      completed_at: session.endTime ?? session.completedAt,
+      time_spent_seconds: session.timeSpent,
+      duration_minutes: session.durationMinutes ?? Math.floor(session.timeSpent / 60),
       cards_reviewed: session.cardsReviewed,
       cards_correct: session.cardsCorrect,
       cards_again: session.cardsAgain,
@@ -402,8 +455,14 @@ export const sessionService = {
 
   async update(id: string, changes: Partial<StudySession>): Promise<void> {
     const row: Record<string, unknown> = {};
-    if (changes.endTime !== undefined) row.end_time = changes.endTime;
+    const endTime = changes.endTime ?? changes.completedAt;
+    if (endTime !== undefined) {
+      row.end_time = endTime;
+      row.completed_at = endTime;
+    }
+    if (changes.timeSpent !== undefined) row.time_spent_seconds = changes.timeSpent;
     if (changes.durationMinutes !== undefined) row.duration_minutes = changes.durationMinutes;
+    else if (changes.timeSpent !== undefined) row.duration_minutes = Math.floor(changes.timeSpent / 60);
     if (changes.cardsReviewed !== undefined) row.cards_reviewed = changes.cardsReviewed;
     if (changes.cardsCorrect !== undefined) row.cards_correct = changes.cardsCorrect;
     if (changes.cardsAgain !== undefined) row.cards_again = changes.cardsAgain;
@@ -425,9 +484,9 @@ export const sessionService = {
     const { data, error } = await supabase
       .from('study_sessions')
       .select('*')
-      .gte('start_time', `${date}T00:00:00.000Z`)
-      .lte('start_time', `${date}T23:59:59.999Z`)
-      .order('start_time', { ascending: false });
+      .gte('started_at', `${date}T00:00:00.000Z`)
+      .lte('started_at', `${date}T23:59:59.999Z`)
+      .order('started_at', { ascending: false });
 
     if (error) throw new Error(`Falha ao buscar sessões da data: ${error.message}`);
     return (data || []).map(toSession);
@@ -437,7 +496,7 @@ export const sessionService = {
     const { data, error } = await supabase
       .from('study_sessions')
       .select('*')
-      .order('start_time', { ascending: false })
+      .order('started_at', { ascending: false })
       .limit(limit);
 
     if (error) throw new Error(`Falha ao buscar sessões recentes: ${error.message}`);
@@ -447,13 +506,13 @@ export const sessionService = {
   async getStreak(): Promise<number> {
     const { data } = await supabase
       .from('study_sessions')
-      .select('start_time')
-      .order('start_time', { ascending: false });
+      .select('started_at')
+      .order('started_at', { ascending: false });
 
     if (!data || data.length === 0) return 0;
 
     const uniqueDays = new Set(
-      data.map((s) => new Date(s.start_time).toISOString().split('T')[0])
+      data.map((s) => new Date(s.started_at).toISOString().split('T')[0])
     );
 
     const sortedDays = Array.from(uniqueDays).sort().reverse();
@@ -492,7 +551,7 @@ export const sessionService = {
 
     for (const s of data) {
       totalCards += Number(s.cards_reviewed || 0);
-      totalTime += Number(s.duration_minutes || 0);
+      totalTime += Number(s.time_spent_seconds || 0) || Number(s.duration_minutes || 0) * 60;
       sumAccuracy += Number(s.accuracy || 0);
     }
 
@@ -500,7 +559,7 @@ export const sessionService = {
       totalSessions: data.length,
       totalCards,
       totalTime,
-      avgAccuracy: Math.round(sumAccuracy / data.length),
+      avgAccuracy: sumAccuracy / data.length,
     };
   },
 };

@@ -11,6 +11,8 @@ import type { Flashcard, SM2Grade } from '../../types';
 interface MultipleChoiceCardProps {
   card: Flashcard;
   onGrade: (grade: SM2Grade) => void;
+  getReviewInterval: (grade: SM2Grade) => string | undefined;
+  grading: boolean;
 }
 
 const CardWrapperStl = styled.div`
@@ -212,13 +214,18 @@ const GradeButtonStl = styled.button<{ $colorType: 'again' | 'hard' | 'good' | '
   }
 `;
 
-export function MultipleChoiceCard({ card, onGrade }: MultipleChoiceCardProps) {
+export function MultipleChoiceCard({ card, onGrade, getReviewInterval, grading }: MultipleChoiceCardProps) {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
 
   const options = card.options || [];
   const hasAnswered = selectedOptionId !== null;
   const selectedOption = options.find((o) => o.id === selectedOptionId);
   const isCorrect = selectedOption?.isCorrect ?? false;
+
+  const reviewHint = (grade: SM2Grade) => {
+    const interval = getReviewInterval(grade);
+    return interval ? ` · ${interval}` : '';
+  };
 
   const handleSelect = (id: string) => {
     if (hasAnswered) return;
@@ -276,19 +283,19 @@ export function MultipleChoiceCard({ card, onGrade }: MultipleChoiceCardProps) {
 
           <GradeButtonsRowStl>
             {!isCorrect ? (
-              <GradeButtonStl $colorType="again" onClick={() => onGrade('again')}>
-                🔄 Errei — Revisar em breve (SM-2: 1)
+              <GradeButtonStl $colorType="again" disabled={grading} onClick={() => onGrade('again')}>
+                🔄 Errei{reviewHint('again')}
               </GradeButtonStl>
             ) : (
               <>
-                <GradeButtonStl $colorType="hard" onClick={() => onGrade('hard')}>
-                  ⚡ Difícil (SM-2: 2)
+                <GradeButtonStl $colorType="hard" disabled={grading} onClick={() => onGrade('hard')}>
+                  ⚡ Difícil{reviewHint('hard')}
                 </GradeButtonStl>
-                <GradeButtonStl $colorType="good" onClick={() => onGrade('good')}>
-                  👍 Bom (SM-2: 3)
+                <GradeButtonStl $colorType="good" disabled={grading} onClick={() => onGrade('good')}>
+                  👍 Bom{reviewHint('good')}
                 </GradeButtonStl>
-                <GradeButtonStl $colorType="easy" onClick={() => onGrade('easy')}>
-                  🎯 Fácil (SM-2: 4)
+                <GradeButtonStl $colorType="easy" disabled={grading} onClick={() => onGrade('easy')}>
+                  🎯 Fácil{reviewHint('easy')}
                 </GradeButtonStl>
               </>
             )}

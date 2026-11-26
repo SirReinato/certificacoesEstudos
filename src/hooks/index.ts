@@ -429,7 +429,7 @@ export function useStudySession(contentId?: string) {
     setLoading(true);
     try {
       const [due, newC] = await Promise.all([
-        flashcardService.getDue(contentId ? 20 : 50),
+        flashcardService.getDue(contentId ? 20 : 50, contentId),
         flashcardService.getNewCards(contentId, contentId ? 10 : 20),
       ]);
       setDueCards(due);
