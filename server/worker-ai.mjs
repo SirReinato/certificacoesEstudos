@@ -29,10 +29,10 @@ export default {
     if (request.method !== 'POST') return responseError(405, 'Use POST.', { Allow: 'POST' });
 
     const Authorization = request.headers.get('Authorization');
-    if (!Authorization?.startsWith('Bearer ')) return responseError(401, 'Entre no SafeZone para usar a IA.');
+    if (!/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(Authorization ?? '')) return responseError(401, 'Entre no SafeZone para usar a IA.');
 
     try {
-      const auth = await fetch(new URL('/auth/v1/user', env.SUPABASE_URL), {
+      const auth = await fetch(new URL('/auth/v1/user', env.SUPABASE_URL).href, {
         headers: { Authorization, apikey: env.SUPABASE_ANON_KEY },
         redirect: 'error',
         signal: AbortSignal.timeout(8000),
@@ -80,7 +80,8 @@ export default {
         : data.choices?.[0]?.message?.content;
       if (!text) return responseError(502, 'O provedor devolveu uma resposta vazia.');
       return Response.json({ text }, { headers: { 'Cache-Control': 'no-store' } });
-    } catch {
+    } catch (error) {
+      console.error('safezone_ai_request_failed', { provider, errorType: error?.name });
       return responseError(502, 'Falha ao comunicar com o serviço de IA ou autenticação.');
     }
   },

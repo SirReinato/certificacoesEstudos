@@ -16,7 +16,7 @@ test('recusa requisição sem sessão antes de chamar um provedor', async () => 
 test('valida o JWT no Supabase e usa a chave Gemini apenas no servidor', async (t) => {
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
     if (String(url).endsWith('/auth/v1/user')) {
-      assert.equal(options.headers.Authorization, 'Bearer session-token');
+      assert.equal(options.headers.Authorization, 'Bearer header.payload.signature');
       return Response.json({ id: 'study-user' });
     }
     assert.equal(new URL(url).hostname, 'generativelanguage.googleapis.com');
@@ -24,7 +24,7 @@ test('valida o JWT no Supabase e usa a chave Gemini apenas no servidor', async (
     assert.equal(new URL(url).search, '');
     return Response.json({ candidates: [{ content: { parts: [{ text: '{"studyGuide":[],"flashcards":[]}' }] } }] });
   });
-  const response = await worker.fetch(request('session-token'), {
+  const response = await worker.fetch(request('header.payload.signature'), {
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_ANON_KEY: 'publishable-fixture',
     GEMINI_API_KEY: 'fixture-secret',
