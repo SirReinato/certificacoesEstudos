@@ -278,7 +278,7 @@ const FileInput = styled.input`
 
 const DEFAULT_AI_MODELS: Record<NonNullable<UserSettings['ai']['provider']>, string> = {
   gemini: 'gemini-3.1-flash-lite',
-  nvidia: 'google/gemma-4-31b-it',
+  nvidia: 'nvidia/nemotron-3.5-lightning-30b-a3b',
   openai: 'gpt-4o-mini',
   'azure-openai': 'gpt-4o-mini',
   anthropic: 'claude-3-5-sonnet-latest',

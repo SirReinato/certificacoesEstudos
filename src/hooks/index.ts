@@ -34,7 +34,7 @@ import { useThemeControl } from '../theme';
 function defaultModelFor(provider: AIConfig['provider']): string {
   switch (provider) {
     case 'nvidia':
-      return 'google/gemma-4-31b-it';
+      return 'nvidia/nemotron-3.5-lightning-30b-a3b';
     case 'openai':
       return 'gpt-4o-mini';
     case 'azure-openai':

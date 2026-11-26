@@ -311,7 +311,7 @@ const GEMINI_MODEL_POOL = [
 ];
 
 const NVIDIA_MODEL_POOL = [
-  'google/gemma-4-31b-it',
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
   'nvidia/nemotron-3.5-lightning-30b-a3b',
   'mistralai/mistral-large-4-1t-a52b',
   'z-ai/glm-5.3-flash',
@@ -581,7 +581,7 @@ async function callNvidia(prompt: string, config: AIConfig): Promise<string> {
   return callOpenAICompatible({
     endpoint,
     apiKey,
-    model: config.model || 'google/gemma-4-31b-it',
+    model: config.model || 'nvidia/nemotron-3.5-lightning-30b-a3b',
     prompt,
     temperature: config.temperature,
     maxTokens: config.maxTokens,

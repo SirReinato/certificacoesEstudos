@@ -482,4 +482,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-26 | Agente IA | SIR-173: geração de leitura curta com síntese, cenário Azure e critério de decisão opcionais, validada com fixtures para AI-200 e AI-103. |
 | 2026-11-26 | Agente IA | SIR-174: sumário navegável, atalho de prática, retorno por histórico e leitura compatível com apostilas antigas e novas. |
 | 2026-11-26 | Agente IA | SIR-172: ordenação do histórico e consultas por data usam o início original das sessões legadas. |
-| 2026-11-26 | Agente IA | Adiciona rotas de IA gerenciada na Cloudflare com sessão Supabase, segredos de runtime e limite por usuário. |
+| 2026-11-26 | Agente IA | Adiciona rotas de IA gerenciada na Cloudflare com sessão Supabase, segredos de runtime e limite por usuário. Define Nemotron 3.5 Lightning como padrão NVIDIA após validação do endpoint. |
