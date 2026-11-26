@@ -77,3 +77,8 @@ export function calculateSM2(
     nextReview: nextReviewDate.toISOString(),
   };
 }
+
+/** Exibe o intervalo usado pelo agendamento. */
+export function formatReviewInterval(interval: number): string {
+  return interval === 1 ? '1 dia' : `${interval} dias`;
+}

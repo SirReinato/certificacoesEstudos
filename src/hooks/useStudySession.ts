@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { flashcardService, sessionService } from '../storage';
 import { calculateSM2, type CardRating } from '../utils/sm2';
 import type { Flashcard } from '../types';
@@ -28,6 +28,8 @@ export function useStudySession() {
   });
 
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
+  const [isGrading, setIsGrading] = useState(false);
+  const grading = useRef(false);
 
   const startSession = async (limit = 40, contentId?: string, practice = false): Promise<StartResult> => {
     const now = new Date().toISOString();
@@ -75,51 +77,51 @@ export function useStudySession() {
     return { status: 'started' };
   };
 
-  const handleAnswer = async (rating: CardRating) => {
+  const handleAnswer = async (rating: CardRating): Promise<boolean> => {
     const currentCard = session.cards[session.currentIndex];
-    if (!currentCard) return;
+    if (!currentCard || grading.current) return false;
+    grading.current = true;
+    setIsGrading(true);
 
-    if (!session.practice) {
-      // 1. Calculate SM-2 update
-      const sm2Update = calculateSM2(
-        rating,
-        currentCard.interval,
-        currentCard.easeFactor,
-        currentCard.repetitions
-      );
+    try {
+      let reviewedCard = currentCard;
+      if (!session.practice) {
+        const update = {
+          ...calculateSM2(rating, currentCard.interval, currentCard.easeFactor, currentCard.repetitions),
+          lastReviewed: new Date().toISOString(),
+          lapses: currentCard.lapses + (rating === 'again' ? 1 : 0),
+        };
+        await flashcardService.update(currentCard.id, update);
+        reviewedCard = { ...currentCard, ...update };
+      }
 
-      // 2. Update card in DB
-      await flashcardService.update(currentCard.id, {
-        ...sm2Update,
-        lastReviewed: new Date().toISOString(),
-        lapses: rating === 'again' ? currentCard.lapses + 1 : currentCard.lapses,
+      const correctCount = session.correctCount + (rating !== 'again' ? 1 : 0);
+      const againCount = session.againCount + (rating === 'again' ? 1 : 0);
+      if (session.id) {
+        const timeSpent = Math.floor((Date.now() - (session.startTime ?? Date.now())) / 1000);
+        await sessionService.update(session.id, {
+          cardsReviewed: session.currentIndex + 1,
+          cardsCorrect: correctCount,
+          cardsAgain: againCount,
+          timeSpent,
+        });
+      }
+
+      // A segunda tentativa já tem uma ocorrência anterior na fila.
+      const alreadyRepeated = session.cards.slice(0, session.currentIndex).some(card => card.id === currentCard.id);
+      setSession({
+        ...session,
+        cards: rating === 'again' && !alreadyRepeated ? [...session.cards, reviewedCard] : session.cards,
+        currentIndex: session.currentIndex + 1,
+        correctCount,
+        againCount,
       });
+      setIsAnswerVisible(false);
+      return true;
+    } finally {
+      grading.current = false;
+      setIsGrading(false);
     }
-
-    // 3. Update session stats
-    const isCorrect = rating !== 'again';
-    const newCorrectCount = isCorrect ? session.correctCount + 1 : session.correctCount;
-    const newAgainCount = !isCorrect ? session.againCount + 1 : session.againCount;
-
-    // 4. Update session in DB
-    if (session.id) {
-      const timeSpent = Math.floor((Date.now() - (session.startTime || Date.now())) / 1000);
-      await sessionService.update(session.id, {
-        cardsReviewed: session.currentIndex + 1,
-        cardsCorrect: newCorrectCount,
-        cardsAgain: newAgainCount,
-        timeSpent: timeSpent,
-      });
-    }
-
-    // 5. Move to next card
-    setSession(prev => ({
-      ...prev,
-      currentIndex: prev.currentIndex + 1,
-      correctCount: newCorrectCount,
-      againCount: newAgainCount,
-    }));
-    setIsAnswerVisible(false);
   };
 
   const endSession = async () => {
@@ -134,6 +136,7 @@ export function useStudySession() {
   return {
     session,
     isAnswerVisible,
+    isGrading,
     setIsAnswerVisible,
     startSession,
     handleAnswer,

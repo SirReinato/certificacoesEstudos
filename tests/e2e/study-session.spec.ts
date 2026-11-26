@@ -147,3 +147,36 @@ test('tema sem cartões apresenta uma mensagem própria', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /nenhum flashcard para este conteúdo/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /praticar agora/i })).toHaveCount(0);
 });
+
+test('múltipla escolha errada volta depois da próxima questão e mostra o prazo salvo', async ({ page }) => {
+  const { updates } = await mockStudy(page, [card('1', 'Primeira'), card('2', 'Segunda')]);
+  await startTopic(page);
+  await page.getByRole('button', { name: /outra opção/i }).click();
+  const wrong = page.getByRole('button', { name: /errei/i });
+  await expect(wrong).toContainText('1 dia');
+  await wrong.click();
+  await expect(page.getByRole('heading', { name: 'Segunda' })).toBeVisible();
+  await gradeGood(page);
+  await expect(page.getByRole('heading', { name: 'Primeira' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /opção correta/i })).toBeEnabled();
+  await gradeGood(page);
+  await expect.poll(() => updates.length).toBe(3);
+  expect(updates[0]).toMatchObject({ interval: 1, next_review: tomorrow, lapses: 1 });
+});
+
+test('cartão de virar reaparece uma vez e preserva o atalho de avaliação', async ({ page }) => {
+  const { updates } = await mockStudy(page, [card('1', 'Questão de virar', { format: 'flip' })]);
+  await startTopic(page);
+  await expect(page.getByRole('button', { name: 'Virar card' })).toBeVisible();
+  await page.getByRole('button', { name: 'Virar card' }).focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: /novamente/i })).toContainText('1 dia');
+  await page.keyboard.press('1');
+  await expect(page.getByText('2 / 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /novamente/i })).toHaveCount(0);
+  await page.keyboard.press('Space');
+  await page.keyboard.press('1');
+  await expect(page.getByText('2 / 2', { exact: true })).toHaveCount(0);
+  expect(updates).toHaveLength(2);
+  expect(updates[1]).toMatchObject({ interval: 1, lapses: 2 });
+});

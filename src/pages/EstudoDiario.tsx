@@ -13,6 +13,7 @@ import { ExamTrapCallout } from '../components/study/ExamTrapCallout';
 import { DecisionMatrix } from '../components/study/DecisionMatrix';
 import { MultipleChoiceCard } from '../components/study/MultipleChoiceCard';
 import type { StudyGuideSection } from '../types';
+import { calculateSM2, formatReviewInterval, type CardRating } from '../utils/sm2';
 
 const PageHeader = styled.div`
   display: flex;
@@ -65,9 +66,9 @@ const ProgressContainer = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing[8]};
 `;
 
-const ProgressFill = styled.div<{ progress: number }>`
+const ProgressFill = styled.div<{ $progress: number }>`
   height: 100%;
-  width: ${({ progress }) => progress}%;
+  width: ${({ $progress }) => $progress}%;
   background: ${({ theme }) => theme.gradients.brand.primary};
   border-radius: ${({ theme }) => theme.radii.full};
   transition: width ${({ theme }) => theme.transitions.normal};
@@ -91,14 +92,14 @@ const Flashcard = styled.div`
   cursor: pointer;
 `;
 
-const FlashcardInner = styled.div<{ flipped: boolean }>`
+const FlashcardInner = styled.div<{ $flipped: boolean }>`
   width: 100%;
   height: 100%;
   min-height: 320px;
   position: relative;
   transform-style: preserve-3d;
   transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: ${({ flipped }) => (flipped ? 'rotateY(180deg)' : 'rotateY(0deg)')};
+  transform: ${({ $flipped }) => ($flipped ? 'rotateY(180deg)' : 'rotateY(0deg)')};
   border-radius: ${({ theme }) => theme.radii.xl};
   box-shadow: ${({ theme }) => theme.shadows.lg};
 `;
@@ -431,10 +432,10 @@ const AddButtonStyled = styled(Link)`
 `;
 
 const ratings = [
-  { key: 'again', label: 'Novamente', desc: '< 1 min', color: '#ef4444' },
-  { key: 'hard', label: 'Difícil', desc: '< 6 min', color: '#f59e0b' },
-  { key: 'good', label: 'Bom', desc: '< 10 min', color: '#22c55e' },
-  { key: 'easy', label: 'Fácil', desc: '> 10 min', color: '#3b82f6' },
+  { key: 'again', label: 'Novamente', color: '#ef4444' },
+  { key: 'hard', label: 'Difícil', color: '#f59e0b' },
+  { key: 'good', label: 'Bom', color: '#22c55e' },
+  { key: 'easy', label: 'Fácil', color: '#3b82f6' },
 ] as const;
 
 export function EstudoDiario() {
@@ -450,7 +451,8 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
     session, 
     setIsAnswerVisible, 
     startSession, 
-    handleAnswer, 
+    handleAnswer,
+    isGrading,
     endSession, 
     currentCard, 
     progress, 
@@ -466,6 +468,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   const [nextReview, setNextReview] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(false);
+  const [answerError, setAnswerError] = useState(false);
 
   // Carrega o título do conteúdo quando vindo da biblioteca (?content=<id>)
   useEffect(() => {
@@ -507,6 +510,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       setNoCards(result.status === 'empty');
       setNextReview(result.status === 'scheduled' ? result.nextReview : null);
       if (result.status === 'started') {
+        setAnswerError(false);
         setFlipped(false);
         setIsSessionActive(true);
       }
@@ -529,9 +533,24 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
     });
   }, [setIsAnswerVisible]);
 
+  const gradeCard = useCallback(async (rating: CardRating) => {
+    setAnswerError(false);
+    try {
+      if (await handleAnswer(rating)) setFlipped(false);
+    } catch {
+      setAnswerError(true);
+    }
+  }, [handleAnswer]);
+
+  const getReviewInterval = (rating: CardRating) => {
+    if (!currentCard || session.practice) return undefined;
+    const { interval } = calculateSM2(rating, currentCard.interval, currentCard.easeFactor, currentCard.repetitions);
+    return formatReviewInterval(interval);
+  };
+
   // Atalhos de teclado: Espaço vira a carta; 1-4 avaliam (somente com a resposta visível)
   useEffect(() => {
-    if (!isSessionActive || isFinished || !currentCard) return;
+    if (!isSessionActive || isFinished || !currentCard || currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -546,12 +565,13 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       }
 
       if (event.code === 'Space' || event.key === ' ') {
+        if (target?.closest('button, a[href]') || isGrading) return;
         event.preventDefault();
         flipCard();
         return;
       }
 
-      if (!flipped) return;
+      if (!flipped || event.repeat || isGrading) return;
 
       const ratingMap: Record<string, 'again' | 'hard' | 'good' | 'easy'> = {
         '1': 'again',
@@ -562,15 +582,13 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       const rating = ratingMap[event.key];
       if (rating) {
         event.preventDefault();
-        handleAnswer(rating);
-        setFlipped(false);
-        setIsAnswerVisible(false);
+        void gradeCard(rating);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSessionActive, isFinished, currentCard, flipped, flipCard, handleAnswer, setIsAnswerVisible]);
+  }, [isSessionActive, isFinished, currentCard, flipped, flipCard, gradeCard, isGrading]);
 
   if (!isSessionActive) {
     if (nextReview) {
@@ -768,7 +786,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       </PageHeader>
 
       <ProgressContainer>
-        <ProgressFill progress={progress} />
+        <ProgressFill $progress={progress} />
       </ProgressContainer>
 
       <FlashcardContainer>
@@ -778,14 +796,16 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
 
         {currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2 ? (
           <MultipleChoiceCard
-            key={currentCard.id}
+            key={session.currentIndex}
             card={currentCard}
-            onGrade={(rating) => handleAnswer(rating)}
+            grading={isGrading}
+            getReviewInterval={getReviewInterval}
+            onGrade={gradeCard}
           />
         ) : (
           <>
             <Flashcard onClick={flipCard} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && flipCard()} aria-label="Virar card">
-              <FlashcardInner flipped={flipped}>
+              <FlashcardInner $flipped={flipped}>
                 <FlashcardFace>
                   <CardTag bg="#dbeafe" color="#1d4ed8">
                     ❓ Questão
@@ -820,20 +840,26 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
                   <RatingButton
                     key={r.key}
                     color={r.color}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAnswer(r.key);
-                      setFlipped(false);
-                    }}
+                    disabled={isGrading}
+                    onClick={() => void gradeCard(r.key)}
                   >
                     {r.label}
-                    <RatingLabel>{r.desc}</RatingLabel>
+                    {!session.practice && <RatingLabel>{getReviewInterval(r.key)}</RatingLabel>}
                   </RatingButton>
                 ))}
               </RatingButtons>
             )}
           </>
         )}
+        {answerError && <p role="alert">Não foi possível salvar a avaliação. Tente novamente.</p>}
+        <PrimaryButton disabled={isGrading} onClick={async () => {
+          try {
+            await endSession();
+            setIsSessionActive(false);
+          } catch {
+            setAnswerError(true);
+          }
+        }}>Encerrar sessão</PrimaryButton>
       </FlashcardContainer>
     </div>
   );

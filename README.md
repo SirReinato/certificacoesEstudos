@@ -36,3 +36,5 @@ See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rule
 A revisão diária e a prática por tema colocam as questões vencidas antes das inéditas, com até 40 questões por sessão. Quando todas as questões do tema estão agendadas para o futuro, a tela mostra a próxima revisão. **Praticar agora** abre um treino extra sem alterar o agendamento ou o histórico.
 
 Execute `npm run test:e2e` para verificar o fluxo no Chromium. A suíte usa um servidor Vite local exclusivo na porta 55173 e simula o Supabase no fluxo de estudo.
+
+Uma questão marcada como **Errei** ou **Novamente** volta uma vez no fim da sessão. Os botões de nota mostram o intervalo calculado pelo SM-2. Você pode encerrar a prática mesmo com questões pendentes.

@@ -364,7 +364,7 @@ O backend SQLite armazena as seguintes entidades centrais:
    - Um tema em dia informa a próxima revisão e oferece o treino extra **Praticar agora**, que preserva o agendamento dos cartões e fica fora do histórico de sessões.
 4. **Algoritmo de Repetição Espaçada (SM-2)**:
    - Na revisão de flashcards, o usuário avalia o cartão entre quatro notas:
-     - `again` (nota 0/1): Errou ou esqueceu completamente (repete na mesma sessão).
+     - `again` (nota 0/1): Errou ou esqueceu completamente. O cartão volta uma vez no fim da fila da sessão, inclusive quando é o único.
      - `hard` (nota 2/3): Lembrou com grande dificuldade (intervalo curto).
      - `good` (nota 4): Lembrou no tempo adequado (padrão de avanço).
      - `easy` (nota 5): Dominou o conceito (avanço mais longo).
@@ -473,3 +473,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-18 | Agente IA | Implementação de rotação de modelos, fallback cruzado entre Google Gemini e NVIDIA NIM (`providerKeys` em `src/types/index.ts`, `src/hooks/index.ts` e `src/pages/Configuracoes.tsx`), cooldown/pacing entre chunks em `src/services/aiService.ts` para respeitar limites de requisição em arquivos `.md` grandes e subdivisão de blocos gigantes em `chunkMarkdownByHeadings` (`src/services/contentIngestion.ts`). |
 | 2026-11-18 | Agente IA | Atualização da lista ativa de modelos NVIDIA NIM (`google/gemma-4-31b-it`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `mistralai/mistral-large-4-1t-a52b`, `z-ai/glm-5.3-flash`, etc.), remoção dos modelos Gemini/NVIDIA descontinuados (404/410) e desativação automática de modelos HTTP 410 na sessão. |
 | 2026-11-26 | Agente IA | SIR-170: fila SM-2 por vencimento e histórico, treino extra sem reagendamento, testes Playwright com relógio controlado e servidor isolado. |
+| 2026-11-26 | Agente IA | SIR-171: erros reapresentados uma vez na sessão, notas com intervalo calculado pelo SM-2 e proteção contra avaliações simultâneas. |
