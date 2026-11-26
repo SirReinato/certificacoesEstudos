@@ -180,3 +180,38 @@ test('cartão de virar reaparece uma vez e preserva o atalho de avaliação', as
   expect(updates).toHaveLength(2);
   expect(updates[1]).toMatchObject({ interval: 1, lapses: 2 });
 });
+
+test('encerra sessão parcial, exibe atividade e retoma a questão sem nota', async ({ page }) => {
+  const { sessions, failNextSessionUpdate } = await mockStudy(page, [card('1', 'Primeira'), card('2', 'Sem nota')]);
+  await startTopic(page);
+  await gradeGood(page);
+  await expect(page.getByRole('heading', { name: 'Sem nota' })).toBeVisible();
+  await page.getByRole('button', { name: /opção correta/i }).click();
+  await page.clock.setFixedTime(new Date('2026-11-26T15:02:05.000Z'));
+  failNextSessionUpdate();
+  await page.getByRole('button', { name: /encerrar por hoje/i }).click();
+  await expect(page.getByRole('alert')).toContainText(/encerrar/i);
+  await page.getByRole('button', { name: /encerrar por hoje/i }).click();
+  await expect(page.getByRole('heading', { name: /sessão finalizada/i })).toBeVisible();
+  expect(sessions[0]).toMatchObject({
+    start_time: today, end_time: '2026-11-26T15:02:05.000Z',
+    duration_minutes: 2, time_spent_seconds: 125, cards_reviewed: 1, cards_correct: 1, content_ids: ['tema'],
+  });
+  sessions.push({ id: 'legacy', started_at: yesterday, completed_at: today, time_spent_seconds: 86, cards_reviewed: 2, content_id: 'tema' });
+  await page.goto('/atividade');
+  await expect(page.getByText('Azure', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('2m 5s')).toBeVisible();
+  await expect(page.getByText('1m 26s')).toBeVisible();
+  await startTopic(page);
+  await expect(page.getByRole('heading', { name: 'Sem nota' })).toBeVisible();
+});
+
+test('salva a avaliação mesmo se a atualização inicial do histórico falhar e conclui a sessão', async ({ page }) => {
+  const { updates, sessions, failNextSessionUpdate } = await mockStudy(page, [card('1', 'Última')]);
+  await startTopic(page);
+  failNextSessionUpdate();
+  await gradeGood(page);
+  await expect(page.getByRole('heading', { name: /sessão finalizada/i })).toBeVisible();
+  expect(updates).toHaveLength(1);
+  expect(sessions[0]).toMatchObject({ end_time: today, cards_reviewed: 1, cards_correct: 1, accuracy: 1 });
+});

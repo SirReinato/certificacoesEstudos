@@ -5,7 +5,7 @@
 import styled from 'styled-components';
 import { useState, useEffect } from 'react';
 import { useTheme } from '../theme';
-import { sessionService } from '../storage';
+import { contentService, sessionService } from '../storage';
 import type { StudySession } from '../types';
 
 const PageHeader = styled.div`
@@ -140,6 +140,7 @@ const EmptyState = styled.div`
 export function Atividade() {
   const theme = useTheme();
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [contentTitles, setContentTitles] = useState<Record<string, string>>({});
   const [totals, setTotals] = useState({
     cards: 0,
     time: 0,
@@ -152,6 +153,12 @@ export function Atividade() {
       try {
         const allSessions = await sessionService.getRecent(100);
         setSessions(allSessions);
+        const ids = [...new Set(allSessions.flatMap(session => session.contentIds ?? []))];
+        try {
+          setContentTitles(await contentService.getTitles(ids));
+        } catch (error) {
+          console.error('Erro ao carregar temas das sessões:', error);
+        }
 
         const totalStats = await sessionService.getTotalStats();
         setTotals({
@@ -223,6 +230,7 @@ export function Atividade() {
                   <SessionMeta>
                     Início: {new Date(s.startedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                   </SessionMeta>
+                  {(s.contentIds ?? []).map(id => contentTitles[id] && <SessionMeta key={id}>{contentTitles[id]}</SessionMeta>)}
                 </SessionInfo>
                 
                 <SessionStats>

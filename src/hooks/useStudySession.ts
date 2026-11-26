@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { flashcardService, sessionService } from '../storage';
 import { calculateSM2, type CardRating } from '../utils/sm2';
 import type { Flashcard } from '../types';
@@ -30,6 +30,7 @@ export function useStudySession() {
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const grading = useRef(false);
+  const [historyPending, setHistoryPending] = useState(false);
 
   const startSession = async (limit = 40, contentId?: string, practice = false): Promise<StartResult> => {
     const now = new Date().toISOString();
@@ -61,6 +62,9 @@ export function useStudySession() {
       cardsAgain: 0,
       timeSpent: 0,
       startedAt: now,
+      startTime: now,
+      contentId,
+      contentIds: contentId ? [contentId] : [],
     });
 
     setSession({
@@ -73,6 +77,7 @@ export function useStudySession() {
       startTime: Date.now(),
     });
     setIsAnswerVisible(false);
+    setHistoryPending(false);
 
     return { status: 'started' };
   };
@@ -98,13 +103,21 @@ export function useStudySession() {
       const correctCount = session.correctCount + (rating !== 'again' ? 1 : 0);
       const againCount = session.againCount + (rating === 'again' ? 1 : 0);
       if (session.id) {
-        const timeSpent = Math.floor((Date.now() - (session.startTime ?? Date.now())) / 1000);
-        await sessionService.update(session.id, {
-          cardsReviewed: session.currentIndex + 1,
-          cardsCorrect: correctCount,
-          cardsAgain: againCount,
-          timeSpent,
-        });
+        const timeSpent = Math.max(0, Math.floor((Date.now() - (session.startTime ?? Date.now())) / 1000));
+        const cardsReviewed = session.currentIndex + 1;
+        try {
+          await sessionService.update(session.id, {
+            cardsReviewed,
+            cardsCorrect: correctCount,
+            cardsAgain: againCount,
+            accuracy: correctCount / cardsReviewed,
+            timeSpent,
+          });
+          setHistoryPending(false);
+        } catch {
+          // The card is already saved. Write the cumulative history again when ending the session.
+          setHistoryPending(true);
+        }
       }
 
       // A segunda tentativa já tem uma ocorrência anterior na fila.
@@ -124,19 +137,26 @@ export function useStudySession() {
     }
   };
 
-  const endSession = async () => {
+  const endSession = useCallback(async () => {
     if (!session.id) return;
-    const timeSpent = Math.floor((Date.now() - (session.startTime || Date.now())) / 1000);
+    const endedAt = new Date();
+    const timeSpent = Math.max(0, Math.floor((endedAt.getTime() - (session.startTime ?? endedAt.getTime())) / 1000));
     await sessionService.update(session.id, {
-      completedAt: new Date().toISOString(),
+      endTime: endedAt.toISOString(),
       timeSpent,
+      cardsReviewed: session.currentIndex,
+      cardsCorrect: session.correctCount,
+      cardsAgain: session.againCount,
+      accuracy: session.currentIndex ? session.correctCount / session.currentIndex : 0,
     });
-  };
+    setHistoryPending(false);
+  }, [session]);
 
   return {
     session,
     isAnswerVisible,
     isGrading,
+    historyPending,
     setIsAnswerVisible,
     startSession,
     handleAnswer,

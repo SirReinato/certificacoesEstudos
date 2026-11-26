@@ -3,7 +3,7 @@
  * Implementação da Fase 4: Repetição Espaçada e Sessão Adaptativa
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../theme';
@@ -453,6 +453,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
     startSession, 
     handleAnswer,
     isGrading,
+    historyPending,
     endSession, 
     currentCard, 
     progress, 
@@ -469,6 +470,10 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(false);
   const [answerError, setAnswerError] = useState(false);
+  const [finalized, setFinalized] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState(false);
+  const finishing = useRef(false);
 
   // Carrega o título do conteúdo quando vindo da biblioteca (?content=<id>)
   useEffect(() => {
@@ -494,12 +499,28 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
     };
   }, [contentId]);
 
-  useEffect(() => {
-    if (isSessionActive && isFinished) {
-      endSession();
+  const finishSession = useCallback(async () => {
+    if (finishing.current || isGrading) return;
+    finishing.current = true;
+    setEnding(true);
+    setEndError(false);
+    try {
+      await endSession();
+      setFinalized(true);
       setIsSessionActive(false);
+    } catch {
+      setEndError(true);
+    } finally {
+      finishing.current = false;
+      setEnding(false);
     }
-  }, [isFinished, isSessionActive, endSession]);
+  }, [endSession, isGrading]);
+
+  useEffect(() => {
+    if (!isSessionActive || !isFinished || isGrading || ending || endError) return;
+    const timer = window.setTimeout(() => void finishSession(), 0);
+    return () => window.clearTimeout(timer);
+  }, [isFinished, isSessionActive, finishSession, isGrading, ending, endError]);
 
   const handleStart = async (practice = false) => {
     if (starting) return;
@@ -511,6 +532,8 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
       setNextReview(result.status === 'scheduled' ? result.nextReview : null);
       if (result.status === 'started') {
         setAnswerError(false);
+        setEndError(false);
+        setFinalized(false);
         setFlipped(false);
         setIsSessionActive(true);
       }
@@ -550,7 +573,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
 
   // Atalhos de teclado: Espaço vira a carta; 1-4 avaliam (somente com a resposta visível)
   useEffect(() => {
-    if (!isSessionActive || isFinished || !currentCard || currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2) return;
+    if (!isSessionActive || isFinished || ending || !currentCard || currentCard.format === 'multiple-choice' && currentCard.options && currentCard.options.length >= 2) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -588,9 +611,9 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSessionActive, isFinished, currentCard, flipped, flipCard, gradeCard, isGrading]);
+  }, [isSessionActive, isFinished, currentCard, flipped, flipCard, gradeCard, isGrading, ending]);
 
-  if (!isSessionActive) {
+  if (!isSessionActive && !finalized) {
     if (nextReview) {
       return (
         <div>
@@ -715,18 +738,17 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
     );
   }
 
-  if (isFinished) {
+  if (finalized) {
     return (
       <div>
         <PageHeader>
-          <Title>Sessão Concluída! 🎉</Title>
+          <Title>{headerTitle}</Title>
         </PageHeader>
         <SessionComplete>
           <CompleteIcon>✅</CompleteIcon>
           <CompleteTitle>Sessão finalizada!</CompleteTitle>
           <CompleteText>
-            Você revisou <strong style={{ color: theme.colors.brand.primary }}>{session.cards.length} flashcards</strong>.
-            Seu cérebro agradece pelo esforço de recall ativo!
+            Avaliações registradas nesta sessão: <strong>{session.currentIndex}</strong>.
           </CompleteText>
           <CompleteStats>
             <CompleteStat>
@@ -739,14 +761,14 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
             </CompleteStat>
             <CompleteStat>
               <CompleteStatValue color={theme.colors.brand.primary}>
-                {session.cards.length > 0 
-                  ? Math.round((session.correctCount / session.cards.length) * 100) 
+                {session.currentIndex > 0
+                  ? Math.round((session.correctCount / session.currentIndex) * 100)
                   : 0}%
               </CompleteStatValue>
               <CompleteStatLabel>Taxa de acerto</CompleteStatLabel>
             </CompleteStat>
           </CompleteStats>
-          <PrimaryButton onClick={() => setIsSessionActive(false)}>Voltar ao Dashboard</PrimaryButton>
+          <PrimaryButton onClick={() => setFinalized(false)}>Voltar ao estudo</PrimaryButton>
         </SessionComplete>
       </div>
     );
@@ -755,10 +777,13 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
   if (!currentCard) {
     return (
       <EmptyState>
-        <EmptyIcon>📭</EmptyIcon>
-        <EmptyTitle>Nenhum card disponível</EmptyTitle>
-        <EmptyDesc>{contentId ? 'Os cards deste conteúdo já foram revisados nesta sessão.' : 'Não há cards para revisar no momento.'}</EmptyDesc>
-        <PrimaryButton onClick={() => setIsSessionActive(false)}>Sair</PrimaryButton>
+        <EmptyTitle>Encerramento da sessão</EmptyTitle>
+        {endError ? (
+          <>
+            <EmptyDesc role="alert">Não foi possível encerrar a sessão. Tente novamente.</EmptyDesc>
+            <PrimaryButton onClick={() => void finishSession()}>Tentar novamente</PrimaryButton>
+          </>
+        ) : <EmptyDesc role="status">Salvando o histórico...</EmptyDesc>}
       </EmptyState>
     );
   }
@@ -798,7 +823,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
           <MultipleChoiceCard
             key={session.currentIndex}
             card={currentCard}
-            grading={isGrading}
+            grading={isGrading || ending}
             getReviewInterval={getReviewInterval}
             onGrade={gradeCard}
           />
@@ -840,7 +865,7 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
                   <RatingButton
                     key={r.key}
                     color={r.color}
-                    disabled={isGrading}
+                    disabled={isGrading || ending}
                     onClick={() => void gradeCard(r.key)}
                   >
                     {r.label}
@@ -852,14 +877,11 @@ function StudySessionPage({ contentId }: { contentId?: string }) {
           </>
         )}
         {answerError && <p role="alert">Não foi possível salvar a avaliação. Tente novamente.</p>}
-        <PrimaryButton disabled={isGrading} onClick={async () => {
-          try {
-            await endSession();
-            setIsSessionActive(false);
-          } catch {
-            setAnswerError(true);
-          }
-        }}>Encerrar sessão</PrimaryButton>
+        {historyPending && <p role="status">Avaliação salva. O histórico será atualizado ao encerrar.</p>}
+        {endError && <p role="alert">Não foi possível encerrar a sessão. Tente novamente.</p>}
+        <PrimaryButton disabled={isGrading || ending} onClick={() => void finishSession()}>
+          {ending ? 'Salvando o histórico...' : 'Encerrar por hoje'}
+        </PrimaryButton>
       </FlashcardContainer>
     </div>
   );

@@ -38,3 +38,5 @@ A revisão diária e a prática por tema colocam as questões vencidas antes das
 Execute `npm run test:e2e` para verificar o fluxo no Chromium. A suíte usa um servidor Vite local exclusivo na porta 55173 e simula o Supabase no fluxo de estudo.
 
 Uma questão marcada como **Errei** ou **Novamente** volta uma vez no fim da sessão. Os botões de nota mostram o intervalo calculado pelo SM-2. Você pode encerrar a prática mesmo com questões pendentes.
+
+Use **Encerrar por hoje** para salvar uma sessão parcial. O histórico em **Atividade** mostra o tema, a duração e as contagens. Uma pergunta aberta sem avaliação continua disponível na próxima sessão.

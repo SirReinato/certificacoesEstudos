@@ -362,6 +362,7 @@ O backend SQLite armazena as seguintes entidades centrais:
    - Em seguida, o usuário pratica as questões nos flashcards. A proporção orientadora do sistema é de aproximadamente **30% de tempo de leitura para 70% de prática de questões** (meta orientadora, sem cronômetro punitivo).
    - A fila automática da revisão diária e por tema traz até 40 questões. Revisões vencidas vêm em ordem de vencimento, seguidas por inéditas em ordem de importância, criação e ID. Histórico, repetições ou lapsos identificam questões já avaliadas.
    - Um tema em dia informa a próxima revisão e oferece o treino extra **Praticar agora**, que preserva o agendamento dos cartões e fica fora do histórico de sessões.
+   - **Encerrar por hoje** salva o início e o fim, o tempo em segundos, o tema da sessão focada e as contagens acumuladas no Supabase. A conclusão automática usa o mesmo fluxo. A tela Atividade aceita os campos legados de sessão.
 4. **Algoritmo de Repetição Espaçada (SM-2)**:
    - Na revisão de flashcards, o usuário avalia o cartão entre quatro notas:
      - `again` (nota 0/1): Errou ou esqueceu completamente. O cartão volta uma vez no fim da fila da sessão, inclusive quando é o único.
@@ -474,3 +475,4 @@ Antes de considerar qualquer tarefa ou resposta como concluída, o agente DEVE v
 | 2026-11-18 | Agente IA | Atualização da lista ativa de modelos NVIDIA NIM (`google/gemma-4-31b-it`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `mistralai/mistral-large-4-1t-a52b`, `z-ai/glm-5.3-flash`, etc.), remoção dos modelos Gemini/NVIDIA descontinuados (404/410) e desativação automática de modelos HTTP 410 na sessão. |
 | 2026-11-26 | Agente IA | SIR-170: fila SM-2 por vencimento e histórico, treino extra sem reagendamento, testes Playwright com relógio controlado e servidor isolado. |
 | 2026-11-26 | Agente IA | SIR-171: erros reapresentados uma vez na sessão, notas com intervalo calculado pelo SM-2 e proteção contra avaliações simultâneas. |
+| 2026-11-26 | Agente IA | SIR-172: encerramento parcial e automático com resumo, nova tentativa em falha e histórico Supabase com duração em segundos e tema. |
